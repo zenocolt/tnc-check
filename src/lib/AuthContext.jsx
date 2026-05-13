@@ -5,6 +5,7 @@ import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 
 const AuthContext = createContext();
 const LOCAL_AUTH_KEY = 'tnc_local_auth_user';
+const hasBase44AuthConfig = Boolean(appParams.appId && appParams.appBaseUrl);
 
 const LOCAL_USERS = {
   admin: {
@@ -62,6 +63,16 @@ export const AuthProvider = ({ children }) => {
       if (localUser) {
         setUser(localUser);
         setIsAuthenticated(true);
+        setAuthChecked(true);
+        setIsLoadingAuth(false);
+        setIsLoadingPublicSettings(false);
+        setAuthError(null);
+        return;
+      }
+
+      if (!hasBase44AuthConfig) {
+        setAppPublicSettings(null);
+        setIsAuthenticated(false);
         setAuthChecked(true);
         setIsLoadingAuth(false);
         setIsLoadingPublicSettings(false);
@@ -139,6 +150,15 @@ export const AuthProvider = ({ children }) => {
   };
 
   const checkUserAuth = async () => {
+    if (!hasBase44AuthConfig) {
+      const localUser = readLocalAuthUser();
+      setUser(localUser);
+      setIsAuthenticated(Boolean(localUser));
+      setIsLoadingAuth(false);
+      setAuthChecked(true);
+      return;
+    }
+
     try {
       // Now check if the user is authenticated
       setIsLoadingAuth(true);
@@ -204,6 +224,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const navigateToLogin = () => {
+    if (!hasBase44AuthConfig) {
+      window.location.href = '/login';
+      return true;
+    }
+
     if (!appParams.appBaseUrl) {
       return false;
     }
