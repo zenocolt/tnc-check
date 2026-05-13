@@ -1,0 +1,22 @@
+{
+  "name": "UserPermission",
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "description": "อีเมลผู้ใช้"
+    },
+    "profile": {
+      "type": "string",
+      "enum": [
+        "attendance_only",
+        "editor"
+      ],
+      "description": "ระดับสิทธิ์"
+    }
+  },
+  "required": [
+    "email",
+    "profile"
+  ]
+}

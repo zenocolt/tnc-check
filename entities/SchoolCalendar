@@ -1,0 +1,33 @@
+{
+  "name": "SchoolCalendar",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "holiday",
+        "school_day",
+        "semester_start",
+        "semester_end"
+      ],
+      "description": "\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17\u0e27\u0e31\u0e19"
+    },
+    "description": {
+      "type": "string",
+      "description": "\u0e23\u0e32\u0e22\u0e25\u0e30\u0e40\u0e2d\u0e35\u0e22\u0e14 \u0e40\u0e0a\u0e48\u0e19 \u0e27\u0e31\u0e19\u0e2b\u0e22\u0e38\u0e14\u0e23\u0e32\u0e0a\u0e01\u0e32\u0e23, \u0e40\u0e1b\u0e34\u0e14\u0e20\u0e32\u0e04\u0e40\u0e23\u0e35\u0e22\u0e19"
+    },
+    "week_number": {
+      "type": "number",
+      "description": "\u0e2a\u0e31\u0e1b\u0e14\u0e32\u0e2b\u0e4c\u0e17\u0e35\u0e48"
+    }
+  },
+  "required": [
+    "date",
+    "type"
+  ]
+}

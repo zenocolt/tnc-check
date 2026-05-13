@@ -1,0 +1,555 @@
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.print-only {
+  display: none;
+}
+
+.screen-only {
+  display: block;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box !important;
+  }
+
+  html, body {
+    overflow: hidden !important;
+  }
+
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .screen-only {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  /* ซ่อน sidebar / nav layout */
+  [data-sidebar], aside, nav {
+    display: none !important;
+  }
+
+  /* ให้หน้า ClassReport เต็มหน้ากระดาษ */
+  .print-full {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* progress bar ให้สีพิมพ์ออกมา */
+  .print-bar {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* แถวสรุปรายบุคคล */
+  .print-row {
+    break-inside: avoid;
+  }
+
+  /* ตารางรายการเช็คชื่อ */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 11px;
+  }
+
+  th, td {
+    border: 1px solid #d1d5db !important;
+    padding: 4px 8px !important;
+  }
+
+  thead {
+    background-color: #f3f4f6 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ซ่อน hover effect */
+  tr:hover td {
+    background: transparent !important;
+  }
+
+  /* stat cards */
+  .print-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  /* หน้า ClassLinks สำหรับพิมพ์ QR */
+  .print-classlinks-page {
+    padding: 0 !important;
+    margin: 0 !important;
+    font-family: 'Sarabun', 'Noto Sans Thai', 'Inter', sans-serif;
+    overflow: hidden !important;
+  }
+
+  .print-mode-grid .print-qr-grid {
+    display: grid !important;
+    width: 180mm;
+    max-width: 180mm;
+    grid-template-columns: repeat(3, 56mm);
+    grid-template-rows: repeat(4, 30mm);
+    gap: 3mm !important;
+    justify-content: center;
+    align-content: start;
+    margin: 0 auto;
+    position: relative;
+  }
+
+  .print-mode-grid .print-qr-grid::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      linear-gradient(to right, #cfd8e3 50%, transparent 0) 0 calc(25% - 1.5mm) / 2mm 0.2mm repeat-x,
+      linear-gradient(to right, #cfd8e3 50%, transparent 0) 0 calc(50% + 0mm) / 2mm 0.2mm repeat-x,
+      linear-gradient(to right, #cfd8e3 50%, transparent 0) 0 calc(75% + 1.5mm) / 2mm 0.2mm repeat-x;
+  }
+
+  .print-mode-grid .print-qr-card {
+    width: 56mm;
+    height: 30mm;
+    min-width: 56mm;
+    max-width: 56mm;
+    min-height: 30mm;
+    max-height: 30mm;
+    overflow: hidden !important;
+    border: 0.25mm solid #dbe3ef !important;
+    border-radius: 2.8mm !important;
+    box-shadow: 0 0.45mm 0.9mm rgba(15, 23, 42, 0.08) !important;
+    background: #fff !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    position: relative;
+    z-index: 1;
+  }
+
+  .print-mode-grid .print-qr-card [class*="CardContent"] {
+    padding: 1.5mm !important;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .print-card-row {
+    display: flex;
+    align-items: center;
+    gap: 3mm;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .print-qr-wrap {
+    width: 20mm;
+    height: 20mm;
+    min-width: 20mm;
+    flex: 0 0 20mm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .print-qr-wrap > div {
+    width: 20mm;
+    height: 20mm;
+    border-radius: 1.6mm;
+    border: 0.2mm solid #dbe3ef !important;
+    padding: 0.5mm !important;
+  }
+
+  .print-mode-grid .print-qr-card .print-qr-image {
+    width: 19mm !important;
+    height: 19mm !important;
+  }
+
+  .print-mode-grid .print-qr-card .print-qr-center-logo {
+    width: 3.8mm !important;
+    height: 3.8mm !important;
+  }
+
+  .print-card-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.35mm;
+  }
+
+  .print-college {
+    font-size: 7px;
+    line-height: 1.1;
+    font-weight: 700;
+    color: #64748b;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .print-unit {
+    font-size: 7px;
+    line-height: 1.1;
+    color: #94a3b8;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .print-mode-grid .print-room-title {
+    font-size: 10px;
+    line-height: 1.1;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .print-mode-grid .print-room-subtitle {
+    font-size: 7px;
+    line-height: 1.1;
+    font-weight: 700;
+    color: #334155;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .print-badges {
+    display: flex;
+    gap: 0.7mm;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+
+  .print-pill {
+    font-size: 6px;
+    line-height: 1;
+    border: 0.2mm solid #dbe3ef;
+    border-radius: 9999px;
+    padding: 0.55mm 1.2mm;
+    color: #334155;
+    background: #f8fafc;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .print-pill-primary {
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #2563eb;
+  }
+
+  .print-sheet-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 0.2mm dashed #cbd5e1;
+    padding-bottom: 1mm;
+    margin-bottom: 1.6mm;
+    color: #64748b;
+    font-size: 2.2mm;
+  }
+
+  .print-sheet-footer {
+    text-align: center;
+    font-size: 2.2mm;
+    color: #64748b;
+    margin-top: 1.2mm;
+    line-height: 1;
+  }
+
+  .print-sheet {
+    position: relative;
+    width: 180mm;
+    max-width: 180mm;
+    margin: 0 auto;
+    min-height: calc(297mm - 16mm);
+    padding-top: 0.4mm;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .print-sheet::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 6;
+    background:
+        linear-gradient(#64748b, #64748b) left 0 top 0 / 2.2mm 0.2mm no-repeat,
+        linear-gradient(#64748b, #64748b) left 0 top 0 / 0.2mm 2.2mm no-repeat,
+        linear-gradient(#64748b, #64748b) right 0 top 0 / 2.2mm 0.2mm no-repeat,
+        linear-gradient(#64748b, #64748b) right 0 top 0 / 0.2mm 2.2mm no-repeat,
+        linear-gradient(#64748b, #64748b) left 0 bottom 0 / 2.2mm 0.2mm no-repeat,
+        linear-gradient(#64748b, #64748b) left 0 bottom 0 / 0.2mm 2.2mm no-repeat,
+        linear-gradient(#64748b, #64748b) right 0 bottom 0 / 2.2mm 0.2mm no-repeat,
+        linear-gradient(#64748b, #64748b) right 0 bottom 0 / 0.2mm 2.2mm no-repeat;
+  }
+
+  /* ปิดโหมดพิมพ์เดิมที่ไม่ใช้งาน เพื่อคุมผลลัพธ์ให้เป็นการ์ดแนวนอนเท่านั้น */
+  .print-mode-single .print-qr-grid,
+  .print-mode-bookmark .print-qr-grid {
+    display: none !important;
+  }
+
+  .print-mode-single .print-qr-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0 !important;
+  }
+
+  .print-mode-single .print-qr-card {
+    break-after: page;
+    page-break-after: always;
+    min-height: 255mm;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  .print-mode-single .print-qr-card:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .print-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .print-card-logo-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .print-card-logo {
+    width: 5px;
+    height: 5px;
+    object-fit: contain;
+  }
+
+  .print-card-logo-fallback {
+    width: 5px;
+    height: 5px;
+    border-radius: 9999px;
+    background: #e2e8f0;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .print-room-title {
+    font-size: 18px;
+    line-height: 1.2;
+    font-weight: 800;
+  }
+
+  .print-room-subtitle {
+    font-size: 14px;
+    line-height: 1.2;
+    font-weight: 700;
+  }
+
+  .print-qr-card img {
+    width: 130px !important;
+    height: 130px !important;
+  }
+
+  .print-mode-single .print-card-logo,
+  .print-mode-single .print-card-logo-fallback {
+    width: 5px;
+    height: 5px;
+  }
+
+  .print-mode-single .print-room-title {
+    font-size: 30px;
+    margin-top: 6px;
+  }
+
+  .print-mode-single .print-room-subtitle {
+    font-size: 22px;
+    margin-top: 4px;
+  }
+
+  .print-mode-single .print-qr-card img {
+    width: 280px !important;
+    height: 280px !important;
+  }
+
+  /* โหมดแปะสมุด: 4-6 ใบต่อหน้า A4 */
+  .print-mode-bookmark .print-qr-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px !important;
+  }
+
+  .print-mode-bookmark .print-qr-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border: 1px solid #d1d5db !important;
+    box-shadow: none !important;
+    width: 90mm;
+    height: auto;
+  }
+
+  .print-mode-bookmark .print-qr-card [class*="CardContent"] {
+    padding: 6px !important;
+  }
+
+  .print-mode-bookmark .print-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: 2px;
+    flex-direction: column;
+  }
+
+  .print-mode-bookmark .print-card-logo,
+  .print-mode-bookmark .print-card-logo-fallback {
+    width: 5px;
+    height: 5px;
+  }
+
+  .print-mode-bookmark .print-room-title {
+    font-size: 9px;
+    margin: 2px 0 0 0;
+  }
+
+  .print-mode-bookmark .print-room-subtitle {
+    font-size: 7px;
+    margin: 1px 0 0 0;
+  }
+
+  .print-mode-bookmark .print-qr-card .flex {
+    flex-direction: column !important;
+    gap: 4px !important;
+  }
+
+  .print-mode-bookmark .print-qr-card img {
+    width: 70px !important;
+    height: 70px !important;
+  }
+
+  .print-mode-bookmark .flex-1 {
+    display: none !important;
+  }
+}
+
+@layer base {
+  :root {
+    --font-sarabun: 'Sarabun', sans-serif;
+    --background: 216 33% 97%;
+    --foreground: 220 30% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 30% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 30% 15%;
+    --primary: 217 71% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 45 93% 58%;
+    --secondary-foreground: 220 30% 15%;
+    --muted: 216 20% 93%;
+    --muted-foreground: 220 10% 46%;
+    --accent: 45 93% 58%;
+    --accent-foreground: 220 30% 15%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 216 20% 88%;
+    --input: 216 20% 88%;
+    --ring: 217 71% 45%;
+    --chart-1: 217 71% 45%;
+    --chart-2: 142 64% 42%;
+    --chart-3: 0 72% 51%;
+    --chart-4: 45 93% 58%;
+    --chart-5: 25 90% 55%;
+    --radius: 0.625rem;
+    --sidebar-background: 217 71% 45%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 45 93% 58%;
+    --sidebar-primary-foreground: 220 30% 15%;
+    --sidebar-accent: 217 71% 38%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 217 50% 55%;
+    --sidebar-ring: 45 93% 58%;
+  }
+
+  .dark {
+    --background: 220 25% 10%;
+    --foreground: 216 20% 93%;
+    --card: 220 25% 14%;
+    --card-foreground: 216 20% 93%;
+    --popover: 220 25% 14%;
+    --popover-foreground: 216 20% 93%;
+    --primary: 217 71% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 45 93% 58%;
+    --secondary-foreground: 220 30% 15%;
+    --muted: 220 20% 18%;
+    --muted-foreground: 216 15% 55%;
+    --accent: 45 93% 58%;
+    --accent-foreground: 220 30% 15%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 20% 22%;
+    --input: 220 20% 22%;
+    --ring: 217 71% 55%;
+    --chart-1: 217 71% 55%;
+    --chart-2: 142 64% 50%;
+    --chart-3: 0 72% 58%;
+    --chart-4: 45 93% 58%;
+    --chart-5: 25 90% 60%;
+    --sidebar-background: 220 25% 14%;
+    --sidebar-foreground: 216 20% 93%;
+    --sidebar-primary: 45 93% 58%;
+    --sidebar-primary-foreground: 220 30% 15%;
+    --sidebar-accent: 220 20% 18%;
+    --sidebar-accent-foreground: 216 20% 93%;
+    --sidebar-border: 220 20% 22%;
+    --sidebar-ring: 217 71% 55%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sarabun);
+  }
+}
