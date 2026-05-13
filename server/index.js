@@ -9,7 +9,7 @@ import Student from '../models/Student.js';
 dotenv.config();
 
 const app = express();
-const port = Number(process.env.MONGO_API_PORT || 4000);
+const port = Number(process.env.PORT || process.env.MONGO_API_PORT || 4000);
 
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));

@@ -114,8 +114,8 @@ export default function ClassLinks() {
   const renderQrWithLogo = (url, alt, qrClassName) => (
     <div className="relative rounded border bg-white p-1">
       <img src={url} alt={alt} className={qrClassName} loading="lazy" />
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-5 h-5 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-200">
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+        <div className="w-6 h-6 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-300">
           <img
             src="https://tnc-check01.gt.tc/img/logo.png"
             alt="โลโก้กลางคิวอาร์โค้ด"

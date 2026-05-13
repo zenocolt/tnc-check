@@ -48,7 +48,8 @@ export default function ClassReport() {
   const { data: roomData, isLoading } = useQuery({
     queryKey: ['class-room-report', roomPath],
     queryFn: async () => {
-      const response = await fetch(`/mongo-api/class-report/${roomPath}`);
+      const apiBaseUrl = import.meta.env.VITE_MONGO_API_URL || 'https://tnc-check.onrender.com/mongo-api';
+      const response = await fetch(`${apiBaseUrl}/class-report/${roomPath}`);
       if (!response.ok) throw new Error('โหลดรายงานห้องเรียนไม่สำเร็จ');
       return response.json();
     },
