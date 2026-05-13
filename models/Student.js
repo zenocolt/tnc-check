@@ -50,11 +50,11 @@ const StudentSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: {
+    timestamps: {    
       createdAt: 'created_date',
       updatedAt: 'updated_date',
     },
   }
 );
 
-export default mongoose.models.Student || mongoose.model('Student', StudentSchema);
+export default mongoose.model('Student', StudentSchema, 'students');
