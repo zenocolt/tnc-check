@@ -2,7 +2,7 @@ import { createClient } from '@base44/sdk';
 import { appParams } from '@/lib/app-params';
 
 const { appId, token, functionsVersion, appBaseUrl } = appParams;
-const apiBaseUrl = import.meta.env.VITE_MONGO_API_URL || '/mongo-api';
+const apiBaseUrl = import.meta.env.VITE_MONGO_API_URL || 'https://tnc-check.onrender.com/mongo-api';
 
 //Create a client with authentication required
 const sdkClient = createClient({
