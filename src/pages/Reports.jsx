@@ -46,29 +46,7 @@ export default function Reports() {
     queryFn: () => base44.entities.Department.list('-created_date', 100),
   });
 
-  const { data: schoolDays = [] } = useQuery({
-    queryKey: ['school-calendar'],
-    queryFn: () => base44.entities.SchoolCalendar.list('-date', 10000),
-  });
-
   const departments = getDepartmentNames({ departmentEntities, students });
-
-  // Calculate school days
-  const holidays = schoolDays.filter(d => d.type === 'holiday').map(d => d.date);
-  const semesterStart = schoolDays.find(d => d.type === 'semester_start');
-
-  const totalSchoolDays = useMemo(() => {
-    if (!semesterStart) return 0;
-    const start = new Date(semesterStart.date);
-    const end = new Date();
-    let count = 0;
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const day = d.getDay();
-      const dateStr = format(d, 'yyyy-MM-dd');
-      if (day !== 0 && day !== 6 && !holidays.includes(dateStr)) count++;
-    }
-    return count;
-  }, [semesterStart, holidays]);
 
   const filtered = useMemo(() => {
     let list = allAttendance;
@@ -87,11 +65,21 @@ export default function Reports() {
   }, [allAttendance, isAdmin, students, user, dateFrom, dateTo, searchDept, searchId]);
 
   // Summary by student
-  // จำนวนวันเข้าแถวจริงในช่วงที่เลือก (unique dates ของ attendance)
+  // จำนวนวันเข้าแถวจริงในช่วงที่เลือก (ยึดเฉพาะกลุ่มที่ดูอยู่)
+  const attendanceForPercentage = useMemo(() => {
+    let list = allAttendance;
+    if (!isAdmin) {
+      const myStudentIds = students.filter(s => s.advisor_email === user?.email).map(s => s.student_id);
+      list = list.filter(a => myStudentIds.includes(a.student_id));
+    }
+    list = list.filter(a => a.date >= dateFrom && a.date <= dateTo);
+    if (searchDept !== 'all') list = list.filter(a => a.department === searchDept);
+    return list;
+  }, [allAttendance, isAdmin, students, user, dateFrom, dateTo, searchDept]);
+
   const totalDaysInRange = useMemo(() => {
-    const rangeDates = allAttendance.filter(a => a.date >= dateFrom && a.date <= dateTo);
-    return new Set(rangeDates.map(a => a.date)).size;
-  }, [allAttendance, dateFrom, dateTo]);
+    return new Set(attendanceForPercentage.map(a => a.date)).size;
+  }, [attendanceForPercentage]);
 
   const studentSummary = useMemo(() => {
     const myStudentList = isAdmin ? students : students.filter(s => s.advisor_email === user?.email);

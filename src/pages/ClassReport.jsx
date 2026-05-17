@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Users, CheckCircle2, XCircle, Clock, Printer } from 'lucide-react';
 

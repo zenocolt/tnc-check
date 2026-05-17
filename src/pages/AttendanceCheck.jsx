@@ -97,10 +97,37 @@ export default function AttendanceCheck() {
     }));
   };
 
+  const clearStatus = (studentId) => {
+    setAttendanceData(prev => {
+      const next = { ...prev };
+      if (!next[studentId]) return prev;
+      const keepNote = next[studentId]?.note || '';
+      if (keepNote) {
+        next[studentId] = { note: keepNote };
+      } else {
+        delete next[studentId];
+      }
+      return next;
+    });
+  };
+
   const markAll = (status) => {
     const newData = { ...attendanceData };
     filteredStudents.forEach(s => {
       newData[s.student_id] = { ...newData[s.student_id], status };
+    });
+    setAttendanceData(newData);
+  };
+
+  const clearAll = () => {
+    const newData = { ...attendanceData };
+    filteredStudents.forEach(s => {
+      const keepNote = newData[s.student_id]?.note || '';
+      if (keepNote) {
+        newData[s.student_id] = { note: keepNote };
+      } else {
+        delete newData[s.student_id];
+      }
     });
     setAttendanceData(newData);
   };
@@ -110,34 +137,52 @@ export default function AttendanceCheck() {
     savingRef.current = true;
     setSaving(true);
     try {
-      const records = filteredStudents
-      .filter(s => attendanceData[s.student_id]?.status)
-      .map(s => ({
-        date: selectedDate,
-        student_id: s.student_id,
-        student_name: `${s.first_name} ${s.last_name}`,
-        status: attendanceData[s.student_id].status,
-        department: s.department,
-        level: s.level,
-        year: s.year,
-        group: s.group || '',
-        note: attendanceData[s.student_id]?.note || '',
-        recorded_by: user?.email || '',
-      }));
+      const existingByStudent = new Map(existingAttendance.map(a => [a.student_id, a]));
+      let savedCount = 0;
+      let canceledCount = 0;
 
-    // Delete existing records for these students on this date, then create new
-    for (const record of records) {
-      const existing = existingAttendance.find(a => a.student_id === record.student_id);
-      if (existing) {
-        await base44.entities.Attendance.update(existing.id, record);
-      } else {
-        await base44.entities.Attendance.create(record);
+      for (const student of filteredStudents) {
+        const status = attendanceData[student.student_id]?.status;
+        const existing = existingByStudent.get(student.student_id);
+
+        if (status) {
+          const record = {
+            date: selectedDate,
+            student_id: student.student_id,
+            student_name: `${student.first_name} ${student.last_name}`,
+            status,
+            department: student.department,
+            level: student.level,
+            year: student.year,
+            group: student.group || '',
+            note: attendanceData[student.student_id]?.note || '',
+            recorded_by: user?.email || '',
+          };
+
+          if (existing) {
+            await base44.entities.Attendance.update(existing.id, record);
+          } else {
+            await base44.entities.Attendance.create(record);
+          }
+          savedCount += 1;
+          continue;
+        }
+
+        if (existing) {
+          await base44.entities.Attendance.delete(existing.id);
+          canceledCount += 1;
+        }
       }
-    }
 
-    queryClient.invalidateQueries({ queryKey: ['attendance-date', selectedDate] });
-    queryClient.invalidateQueries({ queryKey: ['attendance-today'] });
-    toast({ title: 'บันทึกสำเร็จ', description: `บันทึกข้อมูลการเข้าแถว ${records.length} คน` });
+      queryClient.invalidateQueries({ queryKey: ['attendance-date', selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ['attendance-today'] });
+      toast({ title: 'บันทึกสำเร็จ', description: `บันทึก ${savedCount} คน | ยกเลิก ${canceledCount} คน` });
+    } catch (error) {
+      toast({
+        title: 'เกิดข้อผิดพลาด',
+        description: error?.message || 'บันทึกข้อมูลไม่สำเร็จ',
+        variant: 'destructive',
+      });
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -145,6 +190,11 @@ export default function AttendanceCheck() {
   };
 
   const checkedCount = filteredStudents.filter(s => attendanceData[s.student_id]?.status).length;
+  const canceledCount = filteredStudents.filter(s => {
+    const existing = existingAttendance.some(a => a.student_id === s.student_id);
+    const status = attendanceData[s.student_id]?.status;
+    return existing && !status;
+  }).length;
 
   if (!permissions.canTakeAttendance) {
     return (
@@ -237,8 +287,17 @@ export default function AttendanceCheck() {
               {opt.label}ทั้งหมด
             </Button>
           ))}
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-slate-300 text-slate-700 hover:bg-slate-100"
+            onClick={clearAll}
+          >
+            ยกเลิกทั้งหมด
+          </Button>
           <span className="ml-auto text-sm text-muted-foreground">
-            {checkedCount}/{filteredStudents.length} คน
+            เช็คแล้ว {checkedCount}/{filteredStudents.length} คน
+            {canceledCount > 0 ? ` | รอยกเลิก ${canceledCount} คน` : ''}
           </span>
         </div>
       )}
@@ -281,6 +340,12 @@ export default function AttendanceCheck() {
                           {opt.label}
                         </button>
                       ))}
+                      <button
+                        onClick={() => clearStatus(student.student_id)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-slate-300 text-slate-700 bg-transparent hover:bg-slate-100"
+                      >
+                        ยกเลิก
+                      </button>
                     </div>
                     <Input
                       placeholder="หมายเหตุ"
@@ -302,13 +367,13 @@ export default function AttendanceCheck() {
           <Button 
             size="lg" 
             onClick={handleSave}
-            disabled={saving || checkedCount === 0}
+            disabled={saving || (checkedCount === 0 && canceledCount === 0)}
             className="shadow-xl px-8 bg-primary"
           >
             {saving ? (
               <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> กำลังบันทึก...</>
             ) : (
-              <><Save className="w-5 h-5 mr-2" /> บันทึกข้อมูล ({checkedCount} คน)</>
+              <><Save className="w-5 h-5 mr-2" /> บันทึกข้อมูล ({checkedCount} เช็ค | {canceledCount} ยกเลิก)</>
             )}
           </Button>
         </div>

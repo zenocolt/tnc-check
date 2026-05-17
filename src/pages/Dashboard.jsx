@@ -31,11 +31,6 @@ export default function Dashboard() {
     queryFn: () => base44.entities.Attendance.list('-date', 10000),
   });
 
-  const { data: schoolDays = [] } = useQuery({
-    queryKey: ['school-calendar'],
-    queryFn: () => base44.entities.SchoolCalendar.list('-date', 10000),
-  });
-
   // Filter by teacher's class if not admin
   const myStudents = isAdmin 
     ? students 
@@ -75,31 +70,13 @@ export default function Dashboard() {
     };
   });
 
-  // Calculate attendance percentage per student
-  const holidays = schoolDays.filter(d => d.type === 'holiday').map(d => d.date);
-  const semesterStart = schoolDays.find(d => d.type === 'semester_start');
-  
-  const getSchoolDaysCount = () => {
-    if (!semesterStart) return 0;
-    const start = new Date(semesterStart.date);
-    const end = new Date();
-    let count = 0;
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const day = d.getDay();
-      const dateStr = format(d, 'yyyy-MM-dd');
-      if (day !== 0 && day !== 6 && !holidays.includes(dateStr)) {
-        count++;
-      }
-    }
-    return count;
-  };
-
-  const totalSchoolDays = getSchoolDaysCount();
+  // ใช้จำนวนวันที่มีการบันทึกเช็คจริงเป็นตัวหาร
+  const totalCheckedDays = new Set(myAllAttendance.map((a) => a.date)).size;
 
   const studentPercentages = myStudents.map(student => {
     const attendances = myAllAttendance.filter(a => a.student_id === student.student_id);
     const presentDays = attendances.filter(a => a.status === 'มา' || a.status === 'สาย').length;
-    const percentage = totalSchoolDays > 0 ? Math.round((presentDays / totalSchoolDays) * 100) : 100;
+    const percentage = totalCheckedDays > 0 ? Math.round((presentDays / totalCheckedDays) * 100) : 0;
     return { ...student, percentage, presentDays };
   });
 
@@ -154,8 +131,8 @@ export default function Dashboard() {
               <CardTitle className="text-lg">เปอร์เซ็นต์การเข้าแถวห้องเรียน</CardTitle>
             </CardHeader>
             <CardContent>
-              {totalSchoolDays === 0 ? (
-                <p className="text-muted-foreground text-center py-8">ยังไม่ได้ตั้งค่าวันเปิดภาคเรียน</p>
+              {totalCheckedDays === 0 ? (
+                <p className="text-muted-foreground text-center py-8">ยังไม่มีการบันทึกเช็คเข้าแถว</p>
               ) : (
                 <div className="text-center py-4">
                   <p className="text-5xl font-bold text-primary">
@@ -164,7 +141,7 @@ export default function Dashboard() {
                       : 0}%
                   </p>
                   <p className="text-muted-foreground mt-2">อัตราการเข้าแถวเฉลี่ย</p>
-                  <p className="text-sm text-muted-foreground">จากวันเข้าแถวทั้งหมด {totalSchoolDays} วัน</p>
+                  <p className="text-sm text-muted-foreground">จากวันที่เช็คเข้าแถวจริง {totalCheckedDays} วัน</p>
                 </div>
               )}
             </CardContent>
