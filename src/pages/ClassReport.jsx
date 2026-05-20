@@ -1,15 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Users, CheckCircle2, XCircle, Clock, Printer } from 'lucide-react';
-
-const STATUS_BADGE = {
-  มา: 'bg-green-100 text-green-700 border border-green-200',
-  ขาด: 'bg-red-100 text-red-700 border border-red-200',
-  ลา: 'bg-yellow-100 text-yellow-700 border border-yellow-200',
-  สาย: 'bg-orange-100 text-orange-700 border border-orange-200',
-};
 
 function StatCard({ icon, label, value, iconBg, iconColor, borderColor }) {
   return (
@@ -25,17 +17,7 @@ function StatCard({ icon, label, value, iconBg, iconColor, borderColor }) {
   );
 }
 
-function CountBadge({ value, colorClass }) {
-  return (
-    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-semibold ${colorClass}`}>
-      {value}
-    </span>
-  );
-}
-
 export default function ClassReport() {
-  const [filterDate, setFilterDate] = useState('ทั้งหมด');
-  const [filterStatus, setFilterStatus] = useState('ทั้งหมด');
   const [logoError, setLogoError] = useState(false);
   const params = useParams();
   const department = decodeURIComponent(params.department || '');
@@ -55,7 +37,7 @@ export default function ClassReport() {
   });
 
   const roomStudents = roomData?.students || [];
-  const roomAttendance = roomData?.attendance || [];
+  const roomSummary = roomData?.summary || {};
 
   const advisorNames = useMemo(() => {
     return [...new Set(
@@ -67,40 +49,24 @@ export default function ClassReport() {
 
   const advisorLabel = advisorNames.length > 0 ? advisorNames.join(', ') : '-';
 
-  // จำนวนวันเข้าแถวทั้งหมดของห้อง (unique dates) ใช้เป็นตัวหาร
-  const totalDays = useMemo(
-    () => new Set(roomAttendance.map((a) => a.date)).size,
-    [roomAttendance]
-  );
+  const totalDays = roomSummary.total_days || 0;
 
   const summary = useMemo(
     () => roomStudents.map((student) => {
-      const records = roomAttendance.filter((a) => a.student_id === student.student_id);
-      const present = records.filter((a) => a.status === 'มา').length;
-      const late = records.filter((a) => a.status === 'สาย').length;
-      const absent = records.filter((a) => a.status === 'ขาด').length;
-      const leave = records.filter((a) => a.status === 'ลา').length;
-      // ใช้ totalDays (วันเข้าแถวจริงของห้อง) เป็นตัวหาร ไม่ใช่ records.length
-      const attendancePct = totalDays > 0 ? Math.round(((present + late) / totalDays) * 100) : 0;
+      const studentSummary = student.attendance_summary || {};
+      const present = studentSummary.present || 0;
+      const late = studentSummary.late || 0;
+      const absent = studentSummary.absent || 0;
+      const leave = studentSummary.leave || 0;
+      const attendancePct = studentSummary.attendancePct || 0;
       return { ...student, present, late, absent, leave, total: totalDays, attendancePct };
     }),
-    [roomStudents, roomAttendance, totalDays]
+    [roomStudents, totalDays]
   );
 
-  const presentCount = roomAttendance.filter((a) => a.status === 'มา').length;
-  const absentCount = roomAttendance.filter((a) => a.status === 'ขาด').length;
-  const lateLeaveCount = roomAttendance.filter((a) => a.status === 'สาย' || a.status === 'ลา').length;
-
-  const uniqueDates = useMemo(() => {
-    const dates = [...new Set(roomAttendance.map((a) => a.date))].sort((a, b) => b.localeCompare(a));
-    return dates;
-  }, [roomAttendance]);
-
-  const filteredAttendance = useMemo(() => {
-    return roomAttendance
-      .filter((a) => filterDate === 'ทั้งหมด' || a.date === filterDate)
-      .filter((a) => filterStatus === 'ทั้งหมด' || a.status === filterStatus);
-  }, [roomAttendance, filterDate, filterStatus]);
+  const presentCount = roomSummary.present_latest_date ?? roomSummary.present ?? 0;
+  const absentCount = roomSummary.absent || 0;
+  const lateLeaveCount = roomSummary.late_leave || 0;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -266,82 +232,6 @@ export default function ClassReport() {
               </div>
             </div>
 
-            {/* Recent Attendance Log */}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="font-semibold text-gray-700">
-                  รายการเช็คชื่อ
-                  <span className="ml-2 text-sm font-normal text-gray-400">({filteredAttendance.length} รายการ)</span>
-                </h2>
-                <div className="no-print flex flex-wrap gap-2">
-                  {/* Date filter */}
-                  <select
-                    value={filterDate}
-                    onChange={(e) => setFilterDate(e.target.value)}
-                    className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  >
-                    <option value="ทั้งหมด">วันที่: ทั้งหมด</option>
-                    {uniqueDates.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                  {/* Status filter */}
-                  <select
-                    value={filterStatus}
-                    onChange={(e) => setFilterStatus(e.target.value)}
-                    className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  >
-                    <option value="ทั้งหมด">สถานะ: ทั้งหมด</option>
-                    <option value="มา">มา</option>
-                    <option value="ขาด">ขาด</option>
-                    <option value="สาย">สาย</option>
-                    <option value="ลา">ลา</option>
-                  </select>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50">
-                      <TableHead className="text-gray-600 font-medium">วันที่</TableHead>
-                      <TableHead className="text-gray-600 font-medium">รหัส</TableHead>
-                      <TableHead className="text-gray-600 font-medium">ชื่อ</TableHead>
-                      <TableHead className="text-gray-600 font-medium">สถานะ</TableHead>
-                      <TableHead className="text-gray-600 font-medium">หมายเหตุ</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredAttendance.slice(0, 100).map((row) => (
-                      <TableRow key={row.id} className="hover:bg-gray-50">
-                        <TableCell className="font-mono text-sm text-gray-700">{row.date}</TableCell>
-                        <TableCell className="font-mono text-sm text-gray-700">{row.student_id}</TableCell>
-                        <TableCell className="text-gray-800">{row.student_name || '-'}</TableCell>
-                        <TableCell>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[row.status] || 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
-                            {row.status}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-gray-400">{row.note || '–'}</TableCell>
-                      </TableRow>
-                    ))}
-                    {filteredAttendance.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-10 text-gray-400">
-                          {roomAttendance.length === 0 ? 'ยังไม่มีข้อมูลเช็คชื่อ' : 'ไม่พบรายการที่ตรงกับตัวกรอง'}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                    {filteredAttendance.length > 100 && (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-3 text-sm text-gray-400">
-                          แสดง 100 รายการแรก จากทั้งหมด {filteredAttendance.length} รายการ — กรองตามวันที่เพื่อดูรายการเพิ่มเติม
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
           </>
         )}
       </div>

@@ -342,7 +342,14 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
       res.json({
         room: { department: departmentName, level, year, group },
         students: [],
-        attendance: [],
+        summary: {
+          total_days: 0,
+          present: 0,
+          present_latest_date: 0,
+          latest_date: '',
+          absent: 0,
+          late_leave: 0,
+        },
       });
       return;
     }
@@ -361,15 +368,138 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
     const serializedStudents = students.map(serializeStudent);
 
     const studentIds = students.map((s) => s._id);
-    const attendanceQuery = Attendance.find({
-      student: { $in: studentIds },
-    })
-      .sort({ date: -1, created_date: -1 })
-      .populate({ path: 'student', populate: { path: 'department' } })
-      .lean();
+    const attendanceSummaryByStudent = new Map();
+    let totalDays = 0;
+    let latestDate = '';
+    let presentLatestDate = 0;
 
-    const attendance = studentIds.length > 0 ? await attendanceQuery.exec() : [];
-    const serializedAttendance = attendance.map(serializeAttendance);
+    if (studentIds.length > 0) {
+      const [summaryRows, totalDaysRows, latestDateRows] = await Promise.all([
+        Attendance.aggregate([
+          { $match: { student: { $in: studentIds } } },
+          {
+            $group: {
+              _id: '$student',
+              present: {
+                $sum: {
+                  $cond: [{ $eq: ['$status', 'มา'] }, 1, 0],
+                },
+              },
+              late: {
+                $sum: {
+                  $cond: [{ $eq: ['$status', 'สาย'] }, 1, 0],
+                },
+              },
+              absent: {
+                $sum: {
+                  $cond: [{ $eq: ['$status', 'ขาด'] }, 1, 0],
+                },
+              },
+              leave: {
+                $sum: {
+                  $cond: [{ $eq: ['$status', 'ลา'] }, 1, 0],
+                },
+              },
+            },
+          },
+        ]),
+        Attendance.aggregate([
+          { $match: { student: { $in: studentIds } } },
+          {
+            $group: {
+              _id: null,
+              dates: { $addToSet: '$date' },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              total_days: { $size: '$dates' },
+            },
+          },
+        ]),
+        Attendance.aggregate([
+          { $match: { student: { $in: studentIds } } },
+          {
+            $group: {
+              _id: null,
+              latest_date: { $max: '$date' },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              latest_date: 1,
+            },
+          },
+        ]),
+      ]);
+
+      summaryRows.forEach((row) => {
+        attendanceSummaryByStudent.set(normalizeId(row._id), {
+          present: row.present || 0,
+          late: row.late || 0,
+          absent: row.absent || 0,
+          leave: row.leave || 0,
+        });
+      });
+
+      totalDays = totalDaysRows[0]?.total_days || 0;
+      latestDate = latestDateRows[0]?.latest_date || '';
+
+      if (latestDate) {
+        const latestDaySummaryRows = await Attendance.aggregate([
+          { $match: { student: { $in: studentIds }, date: latestDate } },
+          {
+            $group: {
+              _id: null,
+              present_latest_date: {
+                $sum: {
+                  $cond: [{ $eq: ['$status', 'มา'] }, 1, 0],
+                },
+              },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              present_latest_date: 1,
+            },
+          },
+        ]);
+
+        presentLatestDate = latestDaySummaryRows[0]?.present_latest_date || 0;
+      }
+    }
+
+    let roomPresent = 0;
+    let roomAbsent = 0;
+    let roomLateLeave = 0;
+
+    const studentsWithSummary = serializedStudents.map((student) => {
+      const studentSummary = attendanceSummaryByStudent.get(student.id) || {
+        present: 0,
+        late: 0,
+        absent: 0,
+        leave: 0,
+      };
+
+      roomPresent += studentSummary.present;
+      roomAbsent += studentSummary.absent;
+      roomLateLeave += studentSummary.late + studentSummary.leave;
+
+      const attendancePct = totalDays > 0
+        ? Math.round(((studentSummary.present + studentSummary.late) / totalDays) * 100)
+        : 0;
+
+      return {
+        ...student,
+        attendance_summary: {
+          ...studentSummary,
+          attendancePct,
+        },
+      };
+    });
 
     res.json({
       room: {
@@ -378,8 +508,15 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
         year,
         group,
       },
-      students: serializedStudents,
-      attendance: serializedAttendance,
+      students: studentsWithSummary,
+      summary: {
+        total_days: totalDays,
+        present: roomPresent,
+          present_latest_date: presentLatestDate,
+          latest_date: latestDate,
+        absent: roomAbsent,
+        late_leave: roomLateLeave,
+      },
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
