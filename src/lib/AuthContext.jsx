@@ -238,20 +238,48 @@ export const AuthProvider = ({ children }) => {
     return true;
   };
 
-  const loginWithPassword = (username, password) => {
+  const loginWithPassword = async (username, password) => {
     const key = String(username || '').trim().toLowerCase();
     const account = LOCAL_USERS[key];
 
-    if (!account || account.password !== password) {
-      return false;
+    if (account && account.password === password) {
+      saveLocalAuthUser(account.user);
+      setUser(account.user);
+      setIsAuthenticated(true);
+      setAuthChecked(true);
+      setAuthError(null);
+      return true;
     }
 
-    saveLocalAuthUser(account.user);
-    setUser(account.user);
-    setIsAuthenticated(true);
-    setAuthChecked(true);
-    setAuthError(null);
-    return true;
+    try {
+      const permissionItems = await base44.entities.UserPermission.list('-created_date', 1000);
+      const existing = permissionItems.find((item) => {
+        const itemUsername = String(item?.username || '').trim().toLowerCase();
+        return itemUsername === key && String(item?.password || '') === String(password || '');
+      });
+
+      if (!existing) {
+        return false;
+      }
+
+      const profile = String(existing?.profile || '').trim();
+      const localUser = {
+        email: String(existing?.email || `${key}@local`).trim(),
+        full_name: String(existing?.full_name || existing?.username || key).trim(),
+        role: profile === 'editor' ? 'teacher' : 'viewer',
+        username: String(existing?.username || key).trim(),
+      };
+
+      saveLocalAuthUser(localUser);
+      setUser(localUser);
+      setIsAuthenticated(true);
+      setAuthChecked(true);
+      setAuthError(null);
+      return true;
+    } catch (error) {
+      console.error('Local credential login failed:', error);
+      return false;
+    }
   };
 
   return (

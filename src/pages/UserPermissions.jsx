@@ -26,7 +26,9 @@ export default function UserPermissions() {
   const { user } = useOutletContext();
   const permissions = useUserPermissions(user);
   const queryClient = useQueryClient();
-  const [newEmail, setNewEmail] = useState('');
+  const [newFullName, setNewFullName] = useState('');
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [newProfile, setNewProfile] = useState('attendance_only');
 
   const { data: students = [] } = useQuery({
@@ -43,6 +45,14 @@ export default function UserPermissions() {
     () => getKnownUserEmails({ students, currentUser: user, permissionItems }),
     [students, user, permissionItems]
   );
+
+  const permissionByEmail = useMemo(() => {
+    return permissionItems.reduce((acc, item) => {
+      const key = String(item?.email || '').trim();
+      if (key) acc[key] = item;
+      return acc;
+    }, {});
+  }, [permissionItems]);
 
   if (!permissions.canManageUsers) {
     return (
@@ -69,17 +79,45 @@ export default function UserPermissions() {
   };
 
   const handleAddUser = async () => {
-    if (!newEmail.trim()) {
-      toast({ title: 'ข้อผิดพลาด', description: 'กรุณาใส่อีเมล', variant: 'destructive' });
+    const normalizedFullName = newFullName.trim();
+    const normalizedUsername = newUsername.trim().toLowerCase();
+    const email = normalizedUsername ? `${normalizedUsername}@local` : '';
+
+    if (!normalizedFullName) {
+      toast({ title: 'ข้อผิดพลาด', description: 'กรุณาใส่ชื่อผู้ใช้', variant: 'destructive' });
+      return;
+    }
+
+    if (!normalizedUsername) {
+      toast({ title: 'ข้อผิดพลาด', description: 'กรุณาใส่รหัสผู้ใช้', variant: 'destructive' });
+      return;
+    }
+
+    if (!newPassword) {
+      toast({ title: 'ข้อผิดพลาด', description: 'กรุณาใส่รหัสผ่าน', variant: 'destructive' });
+      return;
+    }
+
+    const duplicatedUsername = permissionItems.some(
+      (item) => String(item?.username || '').trim().toLowerCase() === normalizedUsername
+    );
+    if (duplicatedUsername) {
+      toast({ title: 'ข้อผิดพลาด', description: 'รหัสผู้ใช้นี้มีในระบบแล้ว', variant: 'destructive' });
       return;
     }
 
     try {
-      await upsertUserProfile(newEmail.trim(), newProfile, permissionItems);
+      await upsertUserProfile(email, newProfile, permissionItems, {
+        full_name: normalizedFullName,
+        username: normalizedUsername,
+        password: newPassword,
+      });
       queryClient.invalidateQueries({ queryKey: ['user-permissions'] });
-      setNewEmail('');
+      setNewFullName('');
+      setNewUsername('');
+      setNewPassword('');
       setNewProfile('attendance_only');
-      toast({ title: 'เพิ่มผู้ใช้สำเร็จ', description: `${newEmail.trim()} => ${PROFILE_LABEL[newProfile]}` });
+      toast({ title: 'เพิ่มผู้ใช้สำเร็จ', description: `${normalizedUsername} => ${PROFILE_LABEL[newProfile]}` });
     } catch (error) {
       toast({ title: 'ข้อผิดพลาด', description: error.message, variant: 'destructive' });
     }
@@ -118,16 +156,28 @@ export default function UserPermissions() {
           <CardTitle className="text-lg">เพิ่มผู้ใช้ใหม่</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col md:flex-row gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
             <Input
-              placeholder="อีเมล"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              className="flex-1"
+              placeholder="ชื่อผู้ใช้"
+              value={newFullName}
+              onChange={(e) => setNewFullName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddUser()}
+            />
+            <Input
+              placeholder="รหัสผู้ใช้"
+              value={newUsername}
+              onChange={(e) => setNewUsername(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddUser()}
+            />
+            <Input
+              type="password"
+              placeholder="รหัสผ่าน"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddUser()}
             />
             <Select value={newProfile} onValueChange={setNewProfile}>
-              <SelectTrigger className="w-64">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -135,6 +185,8 @@ export default function UserPermissions() {
                 <SelectItem value="editor">{PROFILE_LABEL.editor}</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="mt-2 flex justify-end">
             <Button onClick={handleAddUser} className="gap-2">
               <Plus className="w-4 h-4" /> เพิ่ม
             </Button>
@@ -152,15 +204,21 @@ export default function UserPermissions() {
               const current = map[email] || 'attendance_only';
               const isSelf = email === user?.email;
               const isAdminUser = isSelf && user?.role === 'admin';
+              const accountInfo = permissionByEmail[email];
+              const displayName = String(accountInfo?.full_name || '').trim();
+              const displayUsername = String(accountInfo?.username || '').trim();
 
               return (
                 <div key={email} className="flex flex-col md:flex-row md:items-center gap-2 p-3 rounded-lg border">
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{email}</p>
+                    <p className="font-medium truncate">{displayName || email}</p>
+                    {displayUsername && (
+                      <p className="text-xs text-muted-foreground mt-0.5">รหัสผู้ใช้: {displayUsername}</p>
+                    )}
                     {isAdminUser ? (
                       <Badge variant="secondary" className="mt-1">admin (สิทธิ์เต็ม)</Badge>
                     ) : (
-                      <p className="text-sm text-muted-foreground mt-1">{PROFILE_LABEL[current]}</p>
+                      <p className="text-sm text-muted-foreground mt-1">{PROFILE_LABEL[current]} {displayUsername ? '' : `(${email})`}</p>
                     )}
                   </div>
 

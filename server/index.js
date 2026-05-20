@@ -45,6 +45,14 @@ const parseLimit = (value, fallback = 1000) => {
   return Math.min(parsed, 10000);
 };
 
+const parsePositiveInt = (value, fallback) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.floor(parsed);
+};
+
 const buildFilter = (filter = {}) => {
   const normalized = {};
   Object.entries(filter).forEach(([key, value]) => {
@@ -517,6 +525,470 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
         absent: roomAbsent,
         late_leave: roomLateLeave,
       },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/mongo-api/reports/attendance', async (req, res) => {
+  try {
+    const dateFrom = String(req.query.dateFrom || '').trim();
+    const dateTo = String(req.query.dateTo || '').trim();
+    const search = String(req.query.search || '').trim();
+    const departmentName = String(req.query.department || '').trim();
+    const advisorEmail = String(req.query.advisorEmail || '').trim();
+    const isAdmin = String(req.query.isAdmin || '').toLowerCase() === 'true';
+    const page = parsePositiveInt(req.query.page, 1);
+    const pageSize = Math.min(parsePositiveInt(req.query.pageSize, 50), 200);
+
+    const studentScopeQuery = {};
+    if (!isAdmin) {
+      studentScopeQuery.advisor_email = advisorEmail;
+    }
+
+    if (departmentName && departmentName !== 'all') {
+      const department = await Department.findOne({ name: departmentName }).lean();
+      if (!department) {
+        res.json({
+          summary: {
+            items: [],
+            totalStudents: 0,
+            totalDaysInRange: 0,
+          },
+          detail: {
+            items: [],
+            total: 0,
+            page,
+            pageSize,
+            totalPages: 0,
+          },
+          departments: [],
+        });
+        return;
+      }
+      studentScopeQuery.department = department._id;
+    }
+
+    const scopedStudents = await Student.find(studentScopeQuery)
+      .sort({ student_id: 1 })
+      .populate({ path: 'department' })
+      .lean()
+      .exec();
+
+    if (scopedStudents.length === 0) {
+      res.json({
+        summary: {
+          items: [],
+          totalStudents: 0,
+          totalDaysInRange: 0,
+        },
+        detail: {
+          items: [],
+          total: 0,
+          page,
+          pageSize,
+          totalPages: 0,
+        },
+        departments: [],
+      });
+      return;
+    }
+
+    const scopeStudentIds = scopedStudents.map((student) => student._id);
+    const scopeDepartments = [...new Set(scopedStudents.map((student) => student.department?.name).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
+
+    const searchRegex = search ? new RegExp(search, 'i') : null;
+    const summaryStudents = searchRegex
+      ? scopedStudents.filter((student) => {
+          const fullName = `${student.first_name || ''} ${student.last_name || ''}`.trim();
+          return searchRegex.test(student.student_id || '') || searchRegex.test(fullName);
+        })
+      : scopedStudents;
+
+    const summaryStudentIds = summaryStudents.map((student) => student._id);
+    const summaryStudentMap = new Map(summaryStudents.map((student) => [normalizeId(student._id), serializeStudent(student)]));
+
+    const attendanceMatchBase = {
+      student: { $in: scopeStudentIds },
+    };
+    if (dateFrom) {
+      attendanceMatchBase.date = {
+        ...(attendanceMatchBase.date || {}),
+        $gte: dateFrom,
+      };
+    }
+    if (dateTo) {
+      attendanceMatchBase.date = {
+        ...(attendanceMatchBase.date || {}),
+        $lte: dateTo,
+      };
+    }
+
+    const totalDaysRows = await Attendance.aggregate([
+      { $match: attendanceMatchBase },
+      {
+        $group: {
+          _id: null,
+          dates: { $addToSet: '$date' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalDaysInRange: { $size: '$dates' },
+        },
+      },
+    ]);
+    const totalDaysInRange = totalDaysRows[0]?.totalDaysInRange || 0;
+
+    const summaryAggRows = summaryStudentIds.length > 0
+      ? await Attendance.aggregate([
+          {
+            $match: {
+              ...attendanceMatchBase,
+              student: { $in: summaryStudentIds },
+            },
+          },
+          {
+            $group: {
+              _id: '$student',
+              present: {
+                $sum: {
+                  $cond: [{ $in: ['$status', ['มา', 'สาย']] }, 1, 0],
+                },
+              },
+              absent: {
+                $sum: {
+                  $cond: [{ $eq: ['$status', 'ขาด'] }, 1, 0],
+                },
+              },
+              leave: {
+                $sum: {
+                  $cond: [{ $eq: ['$status', 'ลา'] }, 1, 0],
+                },
+              },
+              late: {
+                $sum: {
+                  $cond: [{ $eq: ['$status', 'สาย'] }, 1, 0],
+                },
+              },
+              total: { $sum: 1 },
+            },
+          },
+        ])
+      : [];
+
+    const summaryAggMap = new Map(summaryAggRows.map((row) => [normalizeId(row._id), row]));
+    const summaryItems = summaryStudents
+      .map((student) => {
+        const studentId = normalizeId(student._id);
+        const agg = summaryAggMap.get(studentId);
+        const present = agg?.present || 0;
+        const absent = agg?.absent || 0;
+        const leave = agg?.leave || 0;
+        const late = agg?.late || 0;
+        const total = agg?.total || 0;
+        const percentage = totalDaysInRange > 0 ? Math.round((present / totalDaysInRange) * 100) : 0;
+        return {
+          ...summaryStudentMap.get(studentId),
+          present,
+          absent,
+          leave,
+          late,
+          total,
+          percentage,
+        };
+      })
+      .sort((a, b) => (a.student_id || '').localeCompare(b.student_id || ''));
+
+    const detailPipeline = [
+      { $match: attendanceMatchBase },
+      {
+        $lookup: {
+          from: 'students',
+          localField: 'student',
+          foreignField: '_id',
+          as: 'studentDoc',
+        },
+      },
+      { $unwind: '$studentDoc' },
+      {
+        $lookup: {
+          from: 'departments',
+          localField: 'studentDoc.department',
+          foreignField: '_id',
+          as: 'departmentDoc',
+        },
+      },
+      {
+        $unwind: {
+          path: '$departmentDoc',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $addFields: {
+          student_id: '$studentDoc.student_id',
+          student_name: {
+            $trim: {
+              input: {
+                $concat: ['$studentDoc.first_name', ' ', '$studentDoc.last_name'],
+              },
+            },
+          },
+          department: '$departmentDoc.name',
+        },
+      },
+    ];
+
+    if (searchRegex) {
+      detailPipeline.push({
+        $match: {
+          $or: [
+            { student_id: { $regex: searchRegex } },
+            { student_name: { $regex: searchRegex } },
+          ],
+        },
+      });
+    }
+
+    detailPipeline.push(
+      { $sort: { student_id: 1, date: -1, created_date: -1 } },
+      {
+        $facet: {
+          items: [
+            { $skip: (page - 1) * pageSize },
+            { $limit: pageSize },
+            {
+              $project: {
+                _id: 1,
+                id: { $toString: '$_id' },
+                date: 1,
+                student_id: 1,
+                student_name: 1,
+                department: 1,
+                status: 1,
+                note: 1,
+                recorded_by: 1,
+              },
+            },
+          ],
+          meta: [{ $count: 'total' }],
+        },
+      }
+    );
+
+    const detailResult = await Attendance.aggregate(detailPipeline);
+    const detailItems = detailResult[0]?.items || [];
+    const detailTotal = detailResult[0]?.meta?.[0]?.total || 0;
+    const totalPages = detailTotal > 0 ? Math.ceil(detailTotal / pageSize) : 0;
+
+    res.json({
+      summary: {
+        items: summaryItems,
+        totalStudents: summaryItems.length,
+        totalDaysInRange,
+      },
+      detail: {
+        items: detailItems,
+        total: detailTotal,
+        page,
+        pageSize,
+        totalPages,
+      },
+      departments: scopeDepartments,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/mongo-api/dashboard-summary', async (req, res) => {
+  try {
+    const today = String(req.query.date || '').trim();
+    const advisorEmail = String(req.query.advisorEmail || '').trim();
+    const isAdmin = String(req.query.isAdmin || '').toLowerCase() === 'true';
+
+    if (!today) {
+      res.status(400).json({ error: 'date is required' });
+      return;
+    }
+
+    const studentScopeQuery = isAdmin ? {} : { advisor_email: advisorEmail };
+    const scopedStudents = await Student.find(studentScopeQuery)
+      .populate({ path: 'department' })
+      .lean()
+      .exec();
+
+    const serializedStudents = scopedStudents.map(serializeStudent);
+    const studentIds = scopedStudents.map((student) => student._id);
+    const studentCount = serializedStudents.length;
+
+    if (studentCount === 0) {
+      res.json({
+        studentCount: 0,
+        todayStats: {
+          มา: 0,
+          ขาด: 0,
+          ลา: 0,
+          สาย: 0,
+        },
+        deptData: [],
+        totalCheckedDays: 0,
+        averageAttendancePct: 0,
+        atRiskStudents: [],
+      });
+      return;
+    }
+
+    const [todayRows, totalDaysRows, studentAttendanceRows] = await Promise.all([
+      Attendance.aggregate([
+        { $match: { student: { $in: studentIds }, date: today } },
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+      Attendance.aggregate([
+        { $match: { student: { $in: studentIds } } },
+        {
+          $group: {
+            _id: null,
+            dates: { $addToSet: '$date' },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            totalCheckedDays: { $size: '$dates' },
+          },
+        },
+      ]),
+      Attendance.aggregate([
+        { $match: { student: { $in: studentIds } } },
+        {
+          $group: {
+            _id: '$student',
+            presentDays: {
+              $sum: {
+                $cond: [{ $in: ['$status', ['มา', 'สาย']] }, 1, 0],
+              },
+            },
+          },
+        },
+      ]),
+    ]);
+
+    const todayStats = {
+      มา: 0,
+      ขาด: 0,
+      ลา: 0,
+      สาย: 0,
+    };
+    todayRows.forEach((row) => {
+      if (todayStats[row._id] !== undefined) {
+        todayStats[row._id] = row.count;
+      }
+    });
+
+    const totalCheckedDays = totalDaysRows[0]?.totalCheckedDays || 0;
+    const presentDaysMap = new Map(studentAttendanceRows.map((row) => [normalizeId(row._id), row.presentDays || 0]));
+
+    const studentPercentages = serializedStudents.map((student) => {
+      const presentDays = presentDaysMap.get(student.id) || 0;
+      const percentage = totalCheckedDays > 0 ? Math.round((presentDays / totalCheckedDays) * 100) : 0;
+      return {
+        ...student,
+        presentDays,
+        percentage,
+      };
+    });
+
+    const atRiskStudents = studentPercentages
+      .filter((student) => student.percentage < 70 && student.percentage > 0)
+      .sort((a, b) => a.percentage - b.percentage)
+      .map((student) => ({
+        id: student.id,
+        student_id: student.student_id,
+        first_name: student.first_name,
+        last_name: student.last_name,
+        department: student.department,
+        percentage: student.percentage,
+      }));
+
+    const averageAttendancePct = studentPercentages.length > 0
+      ? Math.round(studentPercentages.reduce((sum, student) => sum + student.percentage, 0) / studentPercentages.length)
+      : 0;
+
+    const deptTodayMap = new Map();
+    serializedStudents.forEach((student) => {
+      const name = student.department || '-';
+      if (!deptTodayMap.has(name)) {
+        deptTodayMap.set(name, { name, มา: 0, ขาด: 0, ลา: 0, สาย: 0 });
+      }
+    });
+
+    const todayAttendanceRows = await Attendance.aggregate([
+      { $match: { student: { $in: studentIds }, date: today } },
+      {
+        $lookup: {
+          from: 'students',
+          localField: 'student',
+          foreignField: '_id',
+          as: 'studentDoc',
+        },
+      },
+      { $unwind: '$studentDoc' },
+      {
+        $lookup: {
+          from: 'departments',
+          localField: 'studentDoc.department',
+          foreignField: '_id',
+          as: 'departmentDoc',
+        },
+      },
+      {
+        $unwind: {
+          path: '$departmentDoc',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $group: {
+          _id: {
+            department: '$departmentDoc.name',
+            status: '$status',
+          },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    todayAttendanceRows.forEach((row) => {
+      const department = row._id?.department || '-';
+      const status = row._id?.status;
+      if (!deptTodayMap.has(department)) {
+        deptTodayMap.set(department, { name: department, มา: 0, ขาด: 0, ลา: 0, สาย: 0 });
+      }
+      const item = deptTodayMap.get(department);
+      if (item[status] !== undefined) {
+        item[status] = row.count;
+      }
+    });
+
+    const deptData = [...deptTodayMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+    res.json({
+      studentCount,
+      todayStats,
+      deptData,
+      totalCheckedDays,
+      averageAttendancePct,
+      atRiskStudents,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

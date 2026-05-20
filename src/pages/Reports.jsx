@@ -1,7 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { FileSpreadsheet, Search } from 'lucide-react';
@@ -11,7 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { getDepartmentNames } from '@/lib/departments';
 import { useUserPermissions } from '@/lib/access-control';
 
 const statusColors = {
@@ -25,101 +23,79 @@ export default function Reports() {
   const { user } = useOutletContext();
   const permissions = useUserPermissions(user);
   const isAdmin = user?.role === 'admin';
+  const pageSize = 50;
   
   const [dateFrom, setDateFrom] = useState(format(new Date(new Date().setDate(1)), 'yyyy-MM-dd'));
   const [dateTo, setDateTo] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [searchDept, setSearchDept] = useState('all');
   const [searchId, setSearchId] = useState('');
+  const [viewMode, setViewMode] = useState('summary');
+  const [page, setPage] = useState(1);
 
-  const { data: allAttendance = [], isLoading } = useQuery({
-    queryKey: ['all-attendance-reports'],
-    queryFn: () => base44.entities.Attendance.list('-date', 10000),
+  useEffect(() => {
+    setPage(1);
+  }, [dateFrom, dateTo, searchDept, searchId, viewMode]);
+
+  const { data: reportData, isLoading } = useQuery({
+    queryKey: ['reports-attendance-server', dateFrom, dateTo, searchDept, searchId, page, pageSize, isAdmin, user?.email],
+    queryFn: async () => {
+      const apiBaseUrl = import.meta.env.VITE_MONGO_API_URL || 'https://tnc-check.onrender.com/mongo-api';
+      const params = new URLSearchParams({
+        dateFrom,
+        dateTo,
+        department: searchDept,
+        search: searchId,
+        page: String(page),
+        pageSize: String(pageSize),
+        isAdmin: String(isAdmin),
+        advisorEmail: user?.email || '',
+      });
+      const response = await fetch(`${apiBaseUrl}/reports/attendance?${params.toString()}`);
+      if (!response.ok) throw new Error('โหลดรายงานไม่สำเร็จ');
+      return response.json();
+    },
   });
 
-  const { data: students = [] } = useQuery({
-    queryKey: ['students'],
-    queryFn: () => base44.entities.Student.list('-created_date', 10000),
-  });
-
-  const { data: departmentEntities = [] } = useQuery({
-    queryKey: ['departments'],
-    queryFn: () => base44.entities.Department.list('-created_date', 100),
-  });
-
-  const departments = getDepartmentNames({ departmentEntities, students });
-
-  const filtered = useMemo(() => {
-    let list = allAttendance;
-    if (!isAdmin) {
-      const myStudentIds = students.filter(s => s.advisor_email === user?.email).map(s => s.student_id);
-      list = list.filter(a => myStudentIds.includes(a.student_id));
-    }
-    list = list.filter(a => a.date >= dateFrom && a.date <= dateTo);
-    if (searchDept !== 'all') list = list.filter(a => a.department === searchDept);
-    if (searchId) list = list.filter(a => a.student_id?.includes(searchId) || a.student_name?.includes(searchId));
-    return list.sort((a, b) => {
-      const idCompare = (a.student_id || '').localeCompare(b.student_id || '');
-      if (idCompare !== 0) return idCompare;
-      return (b.date || '').localeCompare(a.date || '');
-    });
-  }, [allAttendance, isAdmin, students, user, dateFrom, dateTo, searchDept, searchId]);
-
-  // Summary by student
-  // จำนวนวันเข้าแถวจริงในช่วงที่เลือก (ยึดเฉพาะกลุ่มที่ดูอยู่)
-  const attendanceForPercentage = useMemo(() => {
-    let list = allAttendance;
-    if (!isAdmin) {
-      const myStudentIds = students.filter(s => s.advisor_email === user?.email).map(s => s.student_id);
-      list = list.filter(a => myStudentIds.includes(a.student_id));
-    }
-    list = list.filter(a => a.date >= dateFrom && a.date <= dateTo);
-    if (searchDept !== 'all') list = list.filter(a => a.department === searchDept);
-    return list;
-  }, [allAttendance, isAdmin, students, user, dateFrom, dateTo, searchDept]);
-
-  const totalDaysInRange = useMemo(() => {
-    return new Set(attendanceForPercentage.map(a => a.date)).size;
-  }, [attendanceForPercentage]);
-
-  const studentSummary = useMemo(() => {
-    const myStudentList = isAdmin ? students : students.filter(s => s.advisor_email === user?.email);
-    const filteredByDept = searchDept !== 'all' ? myStudentList.filter(s => s.department === searchDept) : myStudentList;
-    const filteredBySearch = searchId ? filteredByDept.filter(s => s.student_id?.includes(searchId) || `${s.first_name} ${s.last_name}`.includes(searchId)) : filteredByDept;
-    
-    return filteredBySearch.map(s => {
-      const records = allAttendance.filter(a => a.student_id === s.student_id && a.date >= dateFrom && a.date <= dateTo);
-      const present = records.filter(a => a.status === 'มา' || a.status === 'สาย').length;
-      const absent = records.filter(a => a.status === 'ขาด').length;
-      const leave = records.filter(a => a.status === 'ลา').length;
-      const late = records.filter(a => a.status === 'สาย').length;
-      const pct = totalDaysInRange > 0 ? Math.round((present / totalDaysInRange) * 100) : 0;
-      return {
-        ...s,
-        present, absent, leave, late,
-        total: records.length,
-        percentage: pct,
-      };
-    }).sort((a, b) => (a.student_id || '').localeCompare(b.student_id || ''));
-  }, [students, allAttendance, isAdmin, user, dateFrom, dateTo, searchDept, searchId, totalDaysInRange]);
+  const summary = reportData?.summary || { items: [], totalDaysInRange: 0 };
+  const detail = reportData?.detail || { items: [], total: 0, page: 1, pageSize, totalPages: 0 };
+  const departments = reportData?.departments || [];
 
   const exportToExcel = () => {
-    const rows = filtered.map((a) => ({
-      วันที่: a.date || '',
-      รหัสนักศึกษา: a.student_id || '',
-      'ชื่อ-นามสกุล': a.student_name || '',
-      แผนก: a.department || '',
-      สถานะ: a.status || '',
-      หมายเหตุ: a.note || '',
-      ผู้บันทึก: a.recorded_by || '',
-    }));
+    const run = async () => {
+      const apiBaseUrl = import.meta.env.VITE_MONGO_API_URL || 'https://tnc-check.onrender.com/mongo-api';
+      const params = new URLSearchParams({
+        dateFrom,
+        dateTo,
+        department: searchDept,
+        search: searchId,
+        page: '1',
+        pageSize: '10000',
+        isAdmin: String(isAdmin),
+        advisorEmail: user?.email || '',
+      });
+      const response = await fetch(`${apiBaseUrl}/reports/attendance?${params.toString()}`);
+      if (!response.ok) throw new Error('export ไม่สำเร็จ');
+      const data = await response.json();
+      const rows = (data?.detail?.items || []).map((a) => ({
+        วันที่: a.date || '',
+        รหัสนักศึกษา: a.student_id || '',
+        'ชื่อ-นามสกุล': a.student_name || '',
+        แผนก: a.department || '',
+        สถานะ: a.status || '',
+        หมายเหตุ: a.note || '',
+        ผู้บันทึก: a.recorded_by || '',
+      }));
 
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'รายงานผล');
-    XLSX.writeFile(workbook, `attendance_report_${dateFrom}_to_${dateTo}.xlsx`);
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'รายงานผล');
+      XLSX.writeFile(workbook, `attendance_report_${dateFrom}_to_${dateTo}.xlsx`);
+    };
+
+    run().catch(() => {
+      // ignore export error toast to keep existing UX behavior
+    });
   };
-
-  const [viewMode, setViewMode] = useState('summary');
 
   if (!permissions.canViewReports) {
     return (
@@ -209,7 +185,7 @@ export default function Reports() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {studentSummary.map((s, idx) => (
+                  {summary.items.map((s, idx) => (
                     <TableRow key={s.id}>
                       <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                       <TableCell className="font-mono text-xs">{s.student_id}</TableCell>
@@ -233,7 +209,7 @@ export default function Reports() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {studentSummary.length === 0 && (
+                  {summary.items.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">ไม่พบข้อมูล</TableCell>
                     </TableRow>
@@ -262,7 +238,7 @@ export default function Reports() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.slice(0, 200).map((a) => (
+                  {detail.items.map((a) => (
                     <TableRow key={a.id}>
                       <TableCell className="text-sm">{a.date}</TableCell>
                       <TableCell className="font-mono text-xs">{a.student_id}</TableCell>
@@ -274,7 +250,7 @@ export default function Reports() {
                       <TableCell className="hidden md:table-cell text-muted-foreground text-sm">{a.note}</TableCell>
                     </TableRow>
                   ))}
-                  {filtered.length === 0 && (
+                  {detail.items.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">ไม่พบข้อมูล</TableCell>
                     </TableRow>
@@ -282,9 +258,28 @@ export default function Reports() {
                 </TableBody>
               </Table>
             </div>
-            {filtered.length > 200 && (
-              <p className="text-center text-sm text-muted-foreground py-3">แสดง 200 รายการแรกจากทั้งหมด {filtered.length} รายการ</p>
-            )}
+            <div className="flex items-center justify-between p-3 text-sm text-muted-foreground">
+              <span>ทั้งหมด {detail.total} รายการ</span>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={detail.page <= 1}
+                  onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                >
+                  ก่อนหน้า
+                </Button>
+                <span>หน้า {detail.page} / {detail.totalPages || 1}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={detail.totalPages === 0 || detail.page >= detail.totalPages}
+                  onClick={() => setPage((prev) => prev + 1)}
+                >
+                  ถัดไป
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

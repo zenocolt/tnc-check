@@ -1,7 +1,6 @@
 import React from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { Users, CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
@@ -16,71 +15,27 @@ export default function Dashboard() {
   const today = format(new Date(), 'yyyy-MM-dd');
   const isAdmin = user?.role === 'admin';
 
-  const { data: students = [] } = useQuery({
-    queryKey: ['students'],
-    queryFn: () => base44.entities.Student.list('-created_date', 10000),
+  const { data: dashboardData } = useQuery({
+    queryKey: ['dashboard-summary', today, isAdmin, user?.email],
+    queryFn: async () => {
+      const apiBaseUrl = import.meta.env.VITE_MONGO_API_URL || 'https://tnc-check.onrender.com/mongo-api';
+      const params = new URLSearchParams({
+        date: today,
+        isAdmin: String(isAdmin),
+        advisorEmail: user?.email || '',
+      });
+      const response = await fetch(`${apiBaseUrl}/dashboard-summary?${params.toString()}`);
+      if (!response.ok) throw new Error('โหลดข้อมูลแดชบอร์ดไม่สำเร็จ');
+      return response.json();
+    },
   });
 
-  const { data: todayAttendance = [] } = useQuery({
-    queryKey: ['attendance-today', today],
-    queryFn: () => base44.entities.Attendance.filter({ date: today }, '-created_date', 10000),
-  });
-
-  const { data: allAttendance = [] } = useQuery({
-    queryKey: ['all-attendance'],
-    queryFn: () => base44.entities.Attendance.list('-date', 10000),
-  });
-
-  // Filter by teacher's class if not admin
-  const myStudents = isAdmin 
-    ? students 
-    : students.filter(s => s.advisor_email === user?.email);
-
-  const studentIdSet = new Set(myStudents.map((s) => s.student_id));
-
-  const filteredTodayAttendance = todayAttendance.filter((a) => studentIdSet.has(a.student_id));
-  const filteredAllAttendance = allAttendance.filter((a) => studentIdSet.has(a.student_id));
-
-  const myTodayAttendance = isAdmin 
-    ? filteredTodayAttendance
-    : todayAttendance.filter(a => myStudents.some(s => s.student_id === a.student_id));
-
-  const myAllAttendance = isAdmin
-    ? filteredAllAttendance
-    : allAttendance.filter(a => myStudents.some(s => s.student_id === a.student_id));
-
-  // Today's summary
-  const todayStats = {
-    'มา': myTodayAttendance.filter(a => a.status === 'มา').length,
-    'ขาด': myTodayAttendance.filter(a => a.status === 'ขาด').length,
-    'ลา': myTodayAttendance.filter(a => a.status === 'ลา').length,
-    'สาย': myTodayAttendance.filter(a => a.status === 'สาย').length,
-  };
-
-  // Department stats for admin
-  const departments = [...new Set(students.map(s => s.department))].filter(Boolean);
-  const deptData = departments.map(dept => {
-    const deptAttendance = filteredTodayAttendance.filter(a => a.department === dept);
-    return {
-      name: dept,
-      'มา': deptAttendance.filter(a => a.status === 'มา').length,
-      'ขาด': deptAttendance.filter(a => a.status === 'ขาด').length,
-      'ลา': deptAttendance.filter(a => a.status === 'ลา').length,
-      'สาย': deptAttendance.filter(a => a.status === 'สาย').length,
-    };
-  });
-
-  // ใช้จำนวนวันที่มีการบันทึกเช็คจริงเป็นตัวหาร
-  const totalCheckedDays = new Set(myAllAttendance.map((a) => a.date)).size;
-
-  const studentPercentages = myStudents.map(student => {
-    const attendances = myAllAttendance.filter(a => a.student_id === student.student_id);
-    const presentDays = attendances.filter(a => a.status === 'มา' || a.status === 'สาย').length;
-    const percentage = totalCheckedDays > 0 ? Math.round((presentDays / totalCheckedDays) * 100) : 0;
-    return { ...student, percentage, presentDays };
-  });
-
-  const atRiskStudents = studentPercentages.filter(s => s.percentage < 70 && s.percentage > 0);
+  const studentCount = dashboardData?.studentCount || 0;
+  const todayStats = dashboardData?.todayStats || { 'มา': 0, 'ขาด': 0, 'ลา': 0, 'สาย': 0 };
+  const deptData = dashboardData?.deptData || [];
+  const totalCheckedDays = dashboardData?.totalCheckedDays || 0;
+  const averageAttendancePct = dashboardData?.averageAttendancePct || 0;
+  const atRiskStudents = dashboardData?.atRiskStudents || [];
 
   return (
     <div className="space-y-6">
@@ -96,7 +51,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="นักศึกษาทั้งหมด"
-          value={myStudents.length}
+          value={studentCount}
           icon={Users}
           color="bg-primary/10 text-primary"
         />
@@ -105,7 +60,7 @@ export default function Dashboard() {
           value={todayStats['มา']}
           icon={CheckCircle}
           color="bg-green-100 text-green-600"
-          subtitle={myStudents.length > 0 ? `${Math.round((todayStats['มา'] / myStudents.length) * 100)}%` : '0%'}
+          subtitle={studentCount > 0 ? `${Math.round((todayStats['มา'] / studentCount) * 100)}%` : '0%'}
         />
         <StatCard
           title="ขาดวันนี้"
@@ -136,9 +91,7 @@ export default function Dashboard() {
               ) : (
                 <div className="text-center py-4">
                   <p className="text-5xl font-bold text-primary">
-                    {myStudents.length > 0 
-                      ? Math.round(studentPercentages.reduce((sum, s) => sum + s.percentage, 0) / studentPercentages.length)
-                      : 0}%
+                    {averageAttendancePct}%
                   </p>
                   <p className="text-muted-foreground mt-2">อัตราการเข้าแถวเฉลี่ย</p>
                   <p className="text-sm text-muted-foreground">จากวันที่เช็คเข้าแถวจริง {totalCheckedDays} วัน</p>

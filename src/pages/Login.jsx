@@ -15,9 +15,9 @@ export default function Login() {
     return <Navigate to="/" replace />;
   }
 
-  const handleLocalLogin = () => {
+  const handleLocalLogin = async () => {
     setErrorMessage('');
-    const ok = loginWithPassword(username, password);
+    const ok = await loginWithPassword(username, password);
     if (!ok) {
       setErrorMessage('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
     }

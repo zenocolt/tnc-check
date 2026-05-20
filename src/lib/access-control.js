@@ -67,19 +67,33 @@ export function useUserPermissions(user) {
   };
 }
 
-export async function upsertUserProfile(email, profile, permissionItems = []) {
+export async function upsertUserProfile(email, profile, permissionItems = [], metadata = {}) {
   if (!email || !profile) return;
   const normalizedEmail = email.trim();
+  const payload = {
+    profile,
+  };
+
+  if (metadata.full_name !== undefined) {
+    payload.full_name = String(metadata.full_name || '').trim();
+  }
+  if (metadata.username !== undefined) {
+    payload.username = String(metadata.username || '').trim();
+  }
+  if (metadata.password !== undefined) {
+    payload.password = String(metadata.password || '');
+  }
+
   const existing = permissionItems.find((item) => (item?.email || '').trim() === normalizedEmail);
 
   if (existing) {
-    await base44.entities.UserPermission.update(existing.id, { profile });
+    await base44.entities.UserPermission.update(existing.id, payload);
     return;
   }
 
   await base44.entities.UserPermission.create({
     email: normalizedEmail,
-    profile,
+    ...payload,
   });
 }
 
