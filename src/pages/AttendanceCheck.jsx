@@ -57,11 +57,12 @@ export default function AttendanceCheck() {
   });
 
   const isAdmin = user?.role === 'admin';
+  const canAccessAllStudentsForAttendance = isAdmin || permissions.profile === 'attendance_taker';
 
   // Filter students
   const filteredStudents = useMemo(() => {
     let list = students;
-    if (!isAdmin) {
+    if (!canAccessAllStudentsForAttendance) {
       list = list.filter(s => s.advisor_email === user?.email);
     }
     if (selectedLevel !== 'all') list = list.filter(s => s.level === selectedLevel);
@@ -69,7 +70,7 @@ export default function AttendanceCheck() {
     if (selectedYear !== 'all') list = list.filter(s => s.year === selectedYear);
     if (selectedGroup !== 'all') list = list.filter(s => s.group === selectedGroup);
     return list.sort((a, b) => (a.student_id || '').localeCompare(b.student_id || ''));
-  }, [students, isAdmin, user, selectedLevel, selectedDept, selectedYear, selectedGroup]);
+  }, [students, canAccessAllStudentsForAttendance, user, selectedLevel, selectedDept, selectedYear, selectedGroup]);
 
   // Initialize attendance data from existing records
   React.useEffect(() => {
