@@ -9,19 +9,22 @@ import DailyChart from '../components/dashboard/DailyChart';
 import DepartmentChart from '../components/dashboard/DepartmentChart';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useUserPermissions } from '@/lib/access-control';
 
 export default function Dashboard() {
   const { user } = useOutletContext();
   const today = format(new Date(), 'yyyy-MM-dd');
   const isAdmin = user?.role === 'admin';
+  const permissions = useUserPermissions(user);
+  const canAccessAllStudentsForAttendance = isAdmin || permissions.profile === 'attendance_taker';
 
   const { data: dashboardData } = useQuery({
-    queryKey: ['dashboard-summary', today, isAdmin, user?.email],
+    queryKey: ['dashboard-summary', today, canAccessAllStudentsForAttendance, user?.email],
     queryFn: async () => {
       const apiBaseUrl = import.meta.env.VITE_MONGO_API_URL || 'https://tnc-check.onrender.com/mongo-api';
       const params = new URLSearchParams({
         date: today,
-        isAdmin: String(isAdmin),
+        isAdmin: String(canAccessAllStudentsForAttendance),
         advisorEmail: user?.email || '',
       });
       const response = await fetch(`${apiBaseUrl}/dashboard-summary?${params.toString()}`);
