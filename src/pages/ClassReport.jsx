@@ -59,7 +59,8 @@ export default function ClassReport() {
       const absent = studentSummary.absent || 0;
       const leave = studentSummary.leave || 0;
       const attendancePct = studentSummary.attendancePct || 0;
-      return { ...student, present, late, absent, leave, total: totalDays, attendancePct };
+      const checkedCount = present + late + absent + leave;
+      return { ...student, present, late, absent, leave, total: totalDays, attendancePct, checkedCount };
     }),
     [roomStudents, totalDays]
   );
@@ -192,7 +193,9 @@ export default function ClassReport() {
               </div>
               <div className="divide-y divide-gray-100">
                 {summary.map((s, idx) => {
-                  const failed = s.attendancePct < 60;
+                  const hasAttendanceData = totalDays > 0;
+                  const hasStudentRecords = s.checkedCount > 0;
+                  const failed = hasAttendanceData && hasStudentRecords && s.attendancePct < 60;
                   const barColor = s.attendancePct >= 80
                     ? 'bg-green-500'
                     : s.attendancePct >= 60
@@ -211,13 +214,13 @@ export default function ClassReport() {
                             <span className="ml-1.5 text-xs font-normal text-gray-400">{s.student_id}</span>
                           </span>
                           <span className={`text-sm font-bold flex-shrink-0 ${failed ? 'text-red-600' : 'text-gray-700'}`}>
-                            {s.attendancePct}%
+                            {hasAttendanceData ? `${s.attendancePct}%` : '-'}
                           </span>
                         </div>
                         <div className="print-bar w-full bg-gray-100 rounded-full h-2">
                           <div
                             className={`print-bar h-2 rounded-full transition-all ${barColor}`}
-                            style={{ width: `${Math.min(s.attendancePct, 100)}%` }}
+                            style={{ width: `${hasAttendanceData ? Math.min(s.attendancePct, 100) : 0}%` }}
                           />
                         </div>
                       </div>
