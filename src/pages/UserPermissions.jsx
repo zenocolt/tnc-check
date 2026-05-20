@@ -19,6 +19,7 @@ import {
 
 const PROFILE_LABEL = {
   attendance_only: 'ดูรายงานได้เท่านั้น',
+  attendance_taker: 'บันทึกเช็คชื่ออย่างเดียว',
   editor: 'แก้ไขข้อมูลได้ + บันทึกเช็คชื่อ',
 };
 
@@ -146,6 +147,7 @@ export default function UserPermissions() {
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div className="flex items-center gap-2"><Shield className="w-4 h-4" /> attendance_only = ดูรายงานได้เท่านั้น</div>
+          <div className="flex items-center gap-2"><Shield className="w-4 h-4" /> attendance_taker = บันทึกเช็คชื่ออย่างเดียว</div>
           <div className="flex items-center gap-2"><ShieldCheck className="w-4 h-4" /> editor = เข้า/แก้ข้อมูลนักเรียน แผนก ปฏิทิน และระบบนักเรียน</div>
           <div className="text-muted-foreground">หมายเหตุ: ผู้ใช้ role admin จากระบบ มีสิทธิ์เต็มเสมอ</div>
         </CardContent>
@@ -158,13 +160,13 @@ export default function UserPermissions() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
             <Input
-              placeholder="ชื่อผู้ใช้"
+              placeholder="ชื่อ-นามสกุล (แสดงผล)"
               value={newFullName}
               onChange={(e) => setNewFullName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddUser()}
             />
             <Input
-              placeholder="รหัสผู้ใช้"
+              placeholder="ชื่อเข้าใช้ (Login)"
               value={newUsername}
               onChange={(e) => setNewUsername(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddUser()}
@@ -182,6 +184,7 @@ export default function UserPermissions() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="attendance_only">{PROFILE_LABEL.attendance_only}</SelectItem>
+                <SelectItem value="attendance_taker">{PROFILE_LABEL.attendance_taker}</SelectItem>
                 <SelectItem value="editor">{PROFILE_LABEL.editor}</SelectItem>
               </SelectContent>
             </Select>
@@ -213,7 +216,7 @@ export default function UserPermissions() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{displayName || email}</p>
                     {displayUsername && (
-                      <p className="text-xs text-muted-foreground mt-0.5">รหัสผู้ใช้: {displayUsername}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">ชื่อเข้าใช้: {displayUsername}</p>
                     )}
                     {isAdminUser ? (
                       <Badge variant="secondary" className="mt-1">admin (สิทธิ์เต็ม)</Badge>
@@ -230,6 +233,7 @@ export default function UserPermissions() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="attendance_only">{PROFILE_LABEL.attendance_only}</SelectItem>
+                          <SelectItem value="attendance_taker">{PROFILE_LABEL.attendance_taker}</SelectItem>
                           <SelectItem value="editor">{PROFILE_LABEL.editor}</SelectItem>
                         </SelectContent>
                       </Select>

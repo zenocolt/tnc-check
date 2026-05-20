@@ -9,6 +9,12 @@ const PROFILE_FLAGS = {
     canViewReports: true,
     canManageUsers: false,
   },
+  attendance_taker: {
+    canTakeAttendance: true,
+    canEditData: false,
+    canViewReports: false,
+    canManageUsers: false,
+  },
   editor: {
     canTakeAttendance: true,
     canEditData: true,

@@ -10,6 +10,7 @@
       "type": "string",
       "enum": [
         "attendance_only",
+        "attendance_taker",
         "editor"
       ],
       "description": "ระดับสิทธิ์"
