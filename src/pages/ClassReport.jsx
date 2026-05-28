@@ -192,7 +192,7 @@ export default function ClassReport() {
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="font-semibold text-gray-700">สรุปรายบุคคล</h2>
-                <span className="text-xs text-gray-400">เกณฑ์ผ่าน ≥ 60% ({totalDays} วัน) • เลื่อนดูรายชื่อเพิ่มเติม</span>
+                <span className="text-xs text-gray-400">เกณฑ์ผ่าน ≥ 60% ({totalDays} วัน) • เลื่อนเพื่อดูรายชื่อ</span>
               </div>
               <div className="max-h-[560px] overflow-y-auto divide-y divide-gray-100">
                 {summary.map((s, idx) => {
