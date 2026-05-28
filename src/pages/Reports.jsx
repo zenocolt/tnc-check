@@ -28,22 +28,24 @@ export default function Reports() {
   const [dateFrom, setDateFrom] = useState(format(new Date(new Date().setDate(1)), 'yyyy-MM-dd'));
   const [dateTo, setDateTo] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [searchDept, setSearchDept] = useState('all');
+  const [searchYear, setSearchYear] = useState('all');
   const [searchId, setSearchId] = useState('');
   const [viewMode, setViewMode] = useState('summary');
   const [page, setPage] = useState(1);
 
   useEffect(() => {
     setPage(1);
-  }, [dateFrom, dateTo, searchDept, searchId, viewMode]);
+  }, [dateFrom, dateTo, searchDept, searchYear, searchId, viewMode]);
 
   const { data: reportData, isLoading } = useQuery({
-    queryKey: ['reports-attendance-server', dateFrom, dateTo, searchDept, searchId, page, pageSize, isAdmin, user?.email],
+    queryKey: ['reports-attendance-server', dateFrom, dateTo, searchDept, searchYear, searchId, page, pageSize, isAdmin, user?.email],
     queryFn: async () => {
       const apiBaseUrl = import.meta.env.VITE_MONGO_API_URL || 'https://tnc-check.onrender.com/mongo-api';
       const params = new URLSearchParams({
         dateFrom,
         dateTo,
         department: searchDept,
+        year: searchYear,
         search: searchId,
         page: String(page),
         pageSize: String(pageSize),
@@ -59,6 +61,7 @@ export default function Reports() {
   const summary = reportData?.summary || { items: [], totalDaysInRange: 0 };
   const detail = reportData?.detail || { items: [], total: 0, page: 1, pageSize, totalPages: 0 };
   const departments = reportData?.departments || [];
+  const years = reportData?.years || [];
 
   const exportToExcel = () => {
     const run = async () => {
@@ -67,6 +70,7 @@ export default function Reports() {
         dateFrom,
         dateTo,
         department: searchDept,
+        year: searchYear,
         search: searchId,
         page: '1',
         pageSize: '10000',
@@ -123,7 +127,7 @@ export default function Reports() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">จากวันที่</label>
               <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
@@ -139,6 +143,16 @@ export default function Reports() {
                 <SelectContent>
                   <SelectItem value="all">ทั้งหมด</SelectItem>
                   {departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">ชั้นปี</label>
+              <Select value={searchYear} onValueChange={setSearchYear}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">ทั้งหมด</SelectItem>
+                  {years.map(y => <SelectItem key={y} value={String(y)}>{`ปี ${y}`}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

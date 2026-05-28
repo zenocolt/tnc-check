@@ -537,6 +537,7 @@ app.get('/mongo-api/reports/attendance', async (req, res) => {
     const dateTo = String(req.query.dateTo || '').trim();
     const search = String(req.query.search || '').trim();
     const departmentName = String(req.query.department || '').trim();
+    const year = String(req.query.year || '').trim();
     const advisorEmail = String(req.query.advisorEmail || '').trim();
     const isAdmin = String(req.query.isAdmin || '').toLowerCase() === 'true';
     const page = parsePositiveInt(req.query.page, 1);
@@ -564,10 +565,15 @@ app.get('/mongo-api/reports/attendance', async (req, res) => {
             totalPages: 0,
           },
           departments: [],
+          years: [],
         });
         return;
       }
       studentScopeQuery.department = department._id;
+    }
+
+    if (year && year !== 'all') {
+      studentScopeQuery.year = year;
     }
 
     const scopedStudents = await Student.find(studentScopeQuery)
@@ -591,6 +597,7 @@ app.get('/mongo-api/reports/attendance', async (req, res) => {
           totalPages: 0,
         },
         departments: [],
+        years: [],
       });
       return;
     }
@@ -598,6 +605,9 @@ app.get('/mongo-api/reports/attendance', async (req, res) => {
     const scopeStudentIds = scopedStudents.map((student) => student._id);
     const scopeDepartments = [...new Set(scopedStudents.map((student) => student.department?.name).filter(Boolean))]
       .sort((a, b) => a.localeCompare(b));
+    const scopeYears = [...new Set(scopedStudents.map((student) => student.year).filter(Boolean))]
+      .map((value) => String(value))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
     const searchRegex = search ? new RegExp(search, 'i') : null;
     const summaryStudents = searchRegex
@@ -799,6 +809,7 @@ app.get('/mongo-api/reports/attendance', async (req, res) => {
         totalPages,
       },
       departments: scopeDepartments,
+      years: scopeYears,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
