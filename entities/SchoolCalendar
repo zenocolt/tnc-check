@@ -12,6 +12,7 @@
       "enum": [
         "holiday",
         "school_day",
+        "activity",
         "semester_start",
         "semester_end"
       ],

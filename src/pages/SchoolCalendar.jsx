@@ -18,6 +18,7 @@ import { useUserPermissions } from '@/lib/access-control';
 const TYPE_LABELS = {
   holiday: 'วันหยุด',
   school_day: 'วันเรียน',
+  activity: 'กิจกรรม',
   semester_start: 'เปิดภาคเรียน',
   semester_end: 'ปิดภาคเรียน',
 };
@@ -25,6 +26,7 @@ const TYPE_LABELS = {
 const TYPE_COLORS = {
   holiday: 'bg-red-100 text-red-700',
   school_day: 'bg-green-100 text-green-700',
+  activity: 'bg-amber-100 text-amber-700',
   semester_start: 'bg-blue-100 text-blue-700',
   semester_end: 'bg-purple-100 text-purple-700',
 };
@@ -212,6 +214,7 @@ export default function SchoolCalendar() {
                           e.type === 'holiday' ? 'bg-red-500' :
                           e.type === 'semester_start' ? 'bg-blue-500' :
                           e.type === 'semester_end' ? 'bg-purple-500' :
+                          e.type === 'activity' ? 'bg-amber-500' :
                           'bg-green-500'
                         }`} />
                       ))}
@@ -272,6 +275,7 @@ export default function SchoolCalendar() {
                 <SelectContent>
                   <SelectItem value="holiday">วันหยุด</SelectItem>
                   <SelectItem value="school_day">วันเรียนพิเศษ</SelectItem>
+                  <SelectItem value="activity">กิจกรรม</SelectItem>
                   <SelectItem value="semester_start">เปิดภาคเรียน</SelectItem>
                   <SelectItem value="semester_end">ปิดภาคเรียน</SelectItem>
                 </SelectContent>
