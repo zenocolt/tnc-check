@@ -38,6 +38,7 @@ export default function ClassReport() {
 
   const roomStudents = roomData?.students || [];
   const roomSummary = roomData?.summary || {};
+  const mandatoryActivities = roomData?.mandatory_activities || { total_days: 0, by_date: [] };
 
   const advisorNames = useMemo(() => {
     return [...new Set(
@@ -68,6 +69,8 @@ export default function ClassReport() {
   const presentCount = roomSummary.present_latest_date ?? roomSummary.present ?? 0;
   const absentCount = roomSummary.absent || 0;
   const lateLeaveCount = roomSummary.late_leave || 0;
+  const mandatoryTotalDays = mandatoryActivities.total_days || 0;
+  const mandatoryByDate = mandatoryActivities.by_date || [];
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -196,6 +199,8 @@ export default function ClassReport() {
                   const hasAttendanceData = totalDays > 0;
                   const hasStudentRecords = s.checkedCount > 0;
                   const failed = hasAttendanceData && hasStudentRecords && s.attendancePct < 60;
+                  const activitySummary = s.activity_summary || {};
+                  const activityAttended = (activitySummary.present || 0) + (activitySummary.late || 0);
                   const barColor = s.attendancePct >= 80
                     ? 'bg-green-500'
                     : s.attendancePct >= 60
@@ -217,6 +222,12 @@ export default function ClassReport() {
                             {hasAttendanceData ? `${s.attendancePct}%` : '-'}
                           </span>
                         </div>
+                        {mandatoryTotalDays > 0 && (
+                          <p className="text-[11px] text-gray-500 mb-1">
+                            กิจกรรมบังคับ: เข้าร่วม {activityAttended}/{mandatoryTotalDays} วัน
+                            {typeof activitySummary.attendancePct === 'number' ? ` (${activitySummary.attendancePct}%)` : ''}
+                          </p>
+                        )}
                         <div className="print-bar w-full bg-gray-100 rounded-full h-2">
                           <div
                             className={`print-bar h-2 rounded-full transition-all ${barColor}`}
@@ -233,6 +244,46 @@ export default function ClassReport() {
                   );
                 })}
               </div>
+            </div>
+
+            {/* Mandatory Activity Dates */}
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                <h2 className="font-semibold text-gray-700">กิจกรรมบังคับตามปฏิทิน</h2>
+                <span className="text-xs text-gray-400">ทั้งหมด {mandatoryTotalDays} วัน</span>
+              </div>
+              {mandatoryByDate.length === 0 ? (
+                <div className="px-5 py-6 text-sm text-gray-400">ยังไม่พบรายการกิจกรรมบังคับในปฏิทิน</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th className="text-left px-4 py-2 font-medium">วันที่</th>
+                        <th className="text-left px-4 py-2 font-medium">รายละเอียด</th>
+                        <th className="text-center px-3 py-2 font-medium">มา</th>
+                        <th className="text-center px-3 py-2 font-medium">สาย</th>
+                        <th className="text-center px-3 py-2 font-medium">ขาด</th>
+                        <th className="text-center px-3 py-2 font-medium">ลา</th>
+                        <th className="text-center px-3 py-2 font-medium">ยังไม่เช็ค</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {mandatoryByDate.map((item) => (
+                        <tr key={item.date} className="hover:bg-gray-50">
+                          <td className="px-4 py-2 text-gray-700">{item.date}</td>
+                          <td className="px-4 py-2 text-gray-500">{item.description || '-'}</td>
+                          <td className="px-3 py-2 text-center text-green-700 font-medium">{item.present || 0}</td>
+                          <td className="px-3 py-2 text-center text-orange-700 font-medium">{item.late || 0}</td>
+                          <td className="px-3 py-2 text-center text-red-700 font-medium">{item.absent || 0}</td>
+                          <td className="px-3 py-2 text-center text-yellow-700 font-medium">{item.leave || 0}</td>
+                          <td className="px-3 py-2 text-center text-gray-600 font-medium">{item.unrecorded || 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
           </>

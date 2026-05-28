@@ -376,7 +376,23 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
     const serializedStudents = students.map(serializeStudent);
 
     const studentIds = students.map((s) => s._id);
+    const schoolCalendarCollection = getCollection('SchoolCalendar');
+    const today = new Date().toISOString().slice(0, 10);
+    const activityItems = await schoolCalendarCollection
+      .find({ type: 'activity', date: { $lte: today } })
+      .project({ _id: 0, date: 1, description: 1 })
+      .sort({ date: 1 })
+      .toArray();
+    const activityDates = [...new Set(activityItems.map((item) => String(item.date || '').trim()).filter(Boolean))];
+    const activityDescriptionMap = new Map(
+      activityItems
+        .filter((item) => item.date)
+        .map((item) => [String(item.date), String(item.description || '').trim()])
+    );
+
     const attendanceSummaryByStudent = new Map();
+    const activitySummaryByStudent = new Map();
+    const activityByDate = new Map();
     let totalDays = 0;
     let latestDate = '';
     let presentLatestDate = 0;
@@ -452,6 +468,93 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
         });
       });
 
+      if (activityDates.length > 0) {
+        const activityRows = await Attendance.aggregate([
+          {
+            $match: {
+              student: { $in: studentIds },
+              date: { $in: activityDates },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              student: 1,
+              date: 1,
+              status: 1,
+            },
+          },
+        ]);
+
+        const activityStudentDateStatus = new Map();
+        activityRows.forEach((row) => {
+          const studentId = normalizeId(row.student);
+          const date = String(row.date || '');
+          if (!studentId || !date) return;
+
+          const byDate = activityStudentDateStatus.get(studentId) || new Map();
+          byDate.set(date, String(row.status || ''));
+          activityStudentDateStatus.set(studentId, byDate);
+        });
+
+        activityDates.forEach((date) => {
+          activityByDate.set(date, {
+            date,
+            description: activityDescriptionMap.get(date) || '',
+            present: 0,
+            absent: 0,
+            leave: 0,
+            late: 0,
+            unrecorded: studentIds.length,
+          });
+        });
+
+        serializedStudents.forEach((student) => {
+          const byDate = activityStudentDateStatus.get(student.id) || new Map();
+          const summaryItem = {
+            present: 0,
+            absent: 0,
+            leave: 0,
+            late: 0,
+            unrecorded: 0,
+            total: activityDates.length,
+          };
+
+          activityDates.forEach((date) => {
+            const status = byDate.get(date);
+            const daySummary = activityByDate.get(date);
+            if (!status) {
+              summaryItem.unrecorded += 1;
+              return;
+            }
+
+            daySummary.unrecorded = Math.max(daySummary.unrecorded - 1, 0);
+
+            if (status === 'มา') {
+              summaryItem.present += 1;
+              daySummary.present += 1;
+            } else if (status === 'ขาด') {
+              summaryItem.absent += 1;
+              daySummary.absent += 1;
+            } else if (status === 'ลา') {
+              summaryItem.leave += 1;
+              daySummary.leave += 1;
+            } else if (status === 'สาย') {
+              summaryItem.late += 1;
+              daySummary.late += 1;
+            } else {
+              summaryItem.unrecorded += 1;
+            }
+          });
+
+          const attended = summaryItem.present + summaryItem.late;
+          summaryItem.attendancePct = summaryItem.total > 0
+            ? Math.round((attended / summaryItem.total) * 100)
+            : 0;
+          activitySummaryByStudent.set(student.id, summaryItem);
+        });
+      }
+
       totalDays = totalDaysRows[0]?.total_days || 0;
       latestDate = latestDateRows[0]?.latest_date || '';
 
@@ -506,6 +609,15 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
           ...studentSummary,
           attendancePct,
         },
+        activity_summary: activitySummaryByStudent.get(student.id) || {
+          present: 0,
+          absent: 0,
+          leave: 0,
+          late: 0,
+          unrecorded: 0,
+          total: activityDates.length,
+          attendancePct: 0,
+        },
       };
     });
 
@@ -524,6 +636,14 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
           latest_date: latestDate,
         absent: roomAbsent,
         late_leave: roomLateLeave,
+      },
+      mandatory_activities: {
+        total_days: activityDates.length,
+        dates: activityDates.map((date) => ({
+          date,
+          description: activityDescriptionMap.get(date) || '',
+        })),
+        by_date: activityDates.map((date) => activityByDate.get(date)).filter(Boolean),
       },
     });
   } catch (error) {
