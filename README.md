@@ -28,6 +28,10 @@ VITE_BASE44_APP_BASE_URL=https://my-to-do-list-81bfaad7.base44.app
 
 Run the app: `npm run dev`
 
+**Attendance cleanup**
+
+To enable deleting attendance records from the Reports page, set `ATTENDANCE_CLEANUP_KEY` in the server environment (never in a `VITE_` variable). The administrator must enter the same key after reviewing the preview and confirming the cutoff date. Without this server variable, preview remains available but deletion is disabled by the API.
+
 **Publish your changes**
 
 Open [Base44.com](http://Base44.com) and click on Publish.

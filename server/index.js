@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
@@ -711,6 +712,94 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
         by_date: activityDates.map((date) => activityByDate.get(date)).filter(Boolean),
       },
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/mongo-api/attendance-cleanup/preview', async (req, res) => {
+  try {
+    const beforeDate = String(req.query.beforeDate || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(beforeDate)) {
+      res.status(400).json({ error: 'Invalid cutoff date' });
+      return;
+    }
+
+    const match = { date: { $lt: beforeDate } };
+    const [totals, byDate] = await Promise.all([
+      Attendance.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            present: { $sum: { $cond: [{ $eq: ['$status', 'มา'] }, 1, 0] } },
+            late: { $sum: { $cond: [{ $eq: ['$status', 'สาย'] }, 1, 0] } },
+            absent: { $sum: { $cond: [{ $eq: ['$status', 'ขาด'] }, 1, 0] } },
+            leave: { $sum: { $cond: [{ $eq: ['$status', 'ลา'] }, 1, 0] } },
+            firstDate: { $min: '$date' },
+            lastDate: { $max: '$date' },
+          },
+        },
+      ]),
+      Attendance.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: '$date',
+            total: { $sum: 1 },
+            present: { $sum: { $cond: [{ $eq: ['$status', 'มา'] }, 1, 0] } },
+            late: { $sum: { $cond: [{ $eq: ['$status', 'สาย'] }, 1, 0] } },
+            absent: { $sum: { $cond: [{ $eq: ['$status', 'ขาด'] }, 1, 0] } },
+            leave: { $sum: { $cond: [{ $eq: ['$status', 'ลา'] }, 1, 0] } },
+          },
+        },
+        { $sort: { _id: -1 } },
+      ]),
+    ]);
+
+    res.json({
+      before_date: beforeDate,
+      totals: totals[0] || {
+        total: 0,
+        present: 0,
+        late: 0,
+        absent: 0,
+        leave: 0,
+        firstDate: '',
+        lastDate: '',
+      },
+      dates: byDate,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/mongo-api/attendance-cleanup/before-date', async (req, res) => {
+  try {
+    const configuredCleanupKey = String(process.env.ATTENDANCE_CLEANUP_KEY || '');
+    if (!configuredCleanupKey) {
+      res.status(503).json({ error: 'ตั้งค่า ATTENDANCE_CLEANUP_KEY ที่เซิร์ฟเวอร์ก่อนจึงจะลบข้อมูลได้' });
+      return;
+    }
+
+    const providedCleanupKey = String(req.get('x-attendance-cleanup-key') || '');
+    const configuredHash = createHash('sha256').update(configuredCleanupKey).digest();
+    const providedHash = createHash('sha256').update(providedCleanupKey).digest();
+    if (!providedCleanupKey || !timingSafeEqual(configuredHash, providedHash)) {
+      res.status(403).json({ error: 'รหัสยืนยันการลบไม่ถูกต้อง' });
+      return;
+    }
+
+    const beforeDate = String(req.query.beforeDate || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(beforeDate)) {
+      res.status(400).json({ error: 'Invalid cutoff date' });
+      return;
+    }
+
+    const result = await Attendance.deleteMany({ date: { $lt: beforeDate } });
+    res.json({ deleted_count: result.deletedCount || 0, before_date: beforeDate });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
