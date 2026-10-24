@@ -30,7 +30,7 @@ Run the app: `npm run dev`
 
 **Attendance cleanup**
 
-To enable deleting attendance records from the Reports page, set `ATTENDANCE_CLEANUP_KEY` in the server environment (never in a `VITE_` variable). The administrator must enter the same key after reviewing the preview and confirming the cutoff date. Without this server variable, preview remains available but deletion is disabled by the API.
+The Reports page previews attendance records before the selected cutoff date. Deletion proceeds after the user confirms the record count and cutoff date.
 
 **Publish your changes**
 

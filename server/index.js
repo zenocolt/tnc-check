@@ -1,4 +1,3 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
@@ -778,20 +777,6 @@ app.get('/mongo-api/attendance-cleanup/preview', async (req, res) => {
 
 app.delete('/mongo-api/attendance-cleanup/before-date', async (req, res) => {
   try {
-    const configuredCleanupKey = String(process.env.ATTENDANCE_CLEANUP_KEY || '');
-    if (!configuredCleanupKey) {
-      res.status(503).json({ error: 'ตั้งค่า ATTENDANCE_CLEANUP_KEY ที่เซิร์ฟเวอร์ก่อนจึงจะลบข้อมูลได้' });
-      return;
-    }
-
-    const providedCleanupKey = String(req.get('x-attendance-cleanup-key') || '');
-    const configuredHash = createHash('sha256').update(configuredCleanupKey).digest();
-    const providedHash = createHash('sha256').update(providedCleanupKey).digest();
-    if (!providedCleanupKey || !timingSafeEqual(configuredHash, providedHash)) {
-      res.status(403).json({ error: 'รหัสยืนยันการลบไม่ถูกต้อง' });
-      return;
-    }
-
     const beforeDate = String(req.query.beforeDate || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(beforeDate)) {
       res.status(400).json({ error: 'Invalid cutoff date' });

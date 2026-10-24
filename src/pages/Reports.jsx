@@ -122,22 +122,16 @@ export default function Reports() {
     const total = cleanupPreview?.totals?.total || 0;
     if (!isAdmin || total === 0 || isCleaningUp) return;
 
-    const confirmationPhrase = `ลบก่อน ${cleanupBeforeDate}`;
-    const enteredPhrase = window.prompt(
-      `กำลังจะลบข้อมูลเช็คชื่อ ${total.toLocaleString()} รายการที่มีวันที่ก่อน ${cleanupBeforeDate}\nพิมพ์ข้อความนี้เพื่อยืนยัน: ${confirmationPhrase}`
+    const confirmed = window.confirm(
+      `ยืนยันลบข้อมูลเช็คชื่อ ${total.toLocaleString()} รายการที่มีวันที่ก่อน ${cleanupBeforeDate} ใช่หรือไม่? การลบนี้ย้อนกลับไม่ได้`
     );
-    if (enteredPhrase !== confirmationPhrase) return;
-    const cleanupKey = window.prompt('กรอกรหัสยืนยันการลบที่ตั้งค่าไว้ในเซิร์ฟเวอร์');
-    if (!cleanupKey) return;
+    if (!confirmed) return;
 
     setIsCleaningUp(true);
     try {
       const apiBaseUrl = import.meta.env.VITE_MONGO_API_URL || 'https://tnc-check.onrender.com/mongo-api';
       const params = new URLSearchParams({ beforeDate: cleanupBeforeDate });
-      const response = await fetch(`${apiBaseUrl}/attendance-cleanup/before-date?${params}`, {
-        method: 'DELETE',
-        headers: { 'x-attendance-cleanup-key': cleanupKey },
-      });
+      const response = await fetch(`${apiBaseUrl}/attendance-cleanup/before-date?${params}`, { method: 'DELETE' });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data?.error || 'ลบข้อมูลเดิมไม่สำเร็จ');
@@ -243,7 +237,7 @@ export default function Reports() {
                 <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
                 <div>
                   <h2 className="font-semibold text-gray-900">จัดการข้อมูลก่อนเปิดภาคเรียน</h2>
-                  <p className="text-sm text-muted-foreground">ตรวจสอบข้อมูลเช็คชื่อก่อนวันตัด แล้วลบข้อมูลทั้งหมดในช่วงนั้นได้ โดยต้องใช้รหัสยืนยันจากเซิร์ฟเวอร์</p>
+                  <p className="text-sm text-muted-foreground">ตรวจสอบข้อมูลเช็คชื่อก่อนวันตัด แล้วกดยืนยันเพื่อลบข้อมูลทั้งหมดในช่วงนั้น</p>
                 </div>
               </div>
               <label className="flex items-center gap-2 text-sm text-gray-600">
