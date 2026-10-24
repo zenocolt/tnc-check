@@ -53,6 +53,22 @@ const parsePositiveInt = (value, fallback) => {
   return Math.floor(parsed);
 };
 
+const countScheduledDays = (startDate, endDate, holidays = new Set()) => {
+  if (!startDate || !endDate || startDate > endDate) return 0;
+  const date = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  let count = 0;
+
+  while (date <= end) {
+    const day = date.getUTCDay();
+    const dateString = date.toISOString().slice(0, 10);
+    if (day !== 0 && day !== 6 && !holidays.has(dateString)) count += 1;
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+
+  return count;
+};
+
 const buildFilter = (filter = {}) => {
   const normalized = {};
   Object.entries(filter).forEach(([key, value]) => {
@@ -339,6 +355,11 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
     const level = decodeURIComponent(req.params.level || '').trim();
     const year = String(req.params.year || '').trim();
     const group = String(req.params.group || '').trim();
+    const today = new Date().toISOString().slice(0, 10);
+    const requestedDate = String(req.query.date || today);
+    const cutoffDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) && requestedDate <= today
+      ? requestedDate
+      : today;
 
     if (!departmentName || !level || !year || !group) {
       res.status(400).json({ error: 'Missing room parameters' });
@@ -377,12 +398,22 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
 
     const studentIds = students.map((s) => s._id);
     const schoolCalendarCollection = getCollection('SchoolCalendar');
-    const today = new Date().toISOString().slice(0, 10);
-    const activityItems = await schoolCalendarCollection
-      .find({ type: 'activity', date: { $lte: today } })
-      .project({ _id: 0, date: 1, description: 1 })
+    const calendarItems = await schoolCalendarCollection
+      .find({ type: { $in: ['activity', 'holiday', 'semester_start', 'semester_end'] } })
+      .project({ _id: 0, date: 1, description: 1, type: 1 })
       .sort({ date: 1 })
       .toArray();
+    const semesterStarts = calendarItems
+      .filter((item) => item.type === 'semester_start' && item.date <= cutoffDate)
+      .map((item) => String(item.date));
+    const semesterStartDate = semesterStarts.at(-1) || '';
+    const semesterEndDate = calendarItems
+      .filter((item) => item.type === 'semester_end' && item.date >= semesterStartDate)
+      .map((item) => String(item.date))[0] || '';
+    const holidayDates = new Set(
+      calendarItems.filter((item) => item.type === 'holiday').map((item) => String(item.date))
+    );
+    const activityItems = calendarItems.filter((item) => item.type === 'activity' && item.date <= cutoffDate);
     const activityDates = [...new Set(activityItems.map((item) => String(item.date || '').trim()).filter(Boolean))];
     const activityDescriptionMap = new Map(
       activityItems
@@ -396,11 +427,15 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
     let totalDays = 0;
     let latestDate = '';
     let presentLatestDate = 0;
+    let dailyPresent = 0;
+    let dailyLate = 0;
+    let dailyAbsent = 0;
+    let dailyLeave = 0;
 
     if (studentIds.length > 0) {
       const [summaryRows, totalDaysRows, latestDateRows] = await Promise.all([
         Attendance.aggregate([
-          { $match: { student: { $in: studentIds } } },
+          { $match: { student: { $in: studentIds }, date: { $lte: cutoffDate } } },
           {
             $group: {
               _id: '$student',
@@ -428,7 +463,7 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
           },
         ]),
         Attendance.aggregate([
-          { $match: { student: { $in: studentIds } } },
+          { $match: { student: { $in: studentIds }, date: { $lte: cutoffDate } } },
           {
             $group: {
               _id: null,
@@ -443,7 +478,7 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
           },
         ]),
         Attendance.aggregate([
-          { $match: { student: { $in: studentIds } } },
+          { $match: { student: { $in: studentIds }, date: { $lte: cutoffDate } } },
           {
             $group: {
               _id: null,
@@ -466,6 +501,17 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
           absent: row.absent || 0,
           leave: row.leave || 0,
         });
+      });
+
+      const dailyRows = await Attendance.aggregate([
+        { $match: { student: { $in: studentIds }, date: cutoffDate } },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]);
+      dailyRows.forEach((row) => {
+        if (row._id === 'มา') dailyPresent = row.count;
+        if (row._id === 'สาย') dailyLate = row.count;
+        if (row._id === 'ขาด') dailyAbsent = row.count;
+        if (row._id === 'ลา') dailyLeave = row.count;
       });
 
       if (activityDates.length > 0) {
@@ -555,7 +601,9 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
         });
       }
 
-      totalDays = totalDaysRows[0]?.total_days || 0;
+      totalDays = semesterStartDate
+        ? countScheduledDays(semesterStartDate, cutoffDate, holidayDates)
+        : totalDaysRows[0]?.total_days || 0;
       latestDate = latestDateRows[0]?.latest_date || '';
 
       if (latestDate) {
@@ -631,11 +679,28 @@ app.get('/mongo-api/class-report/:department/:level/:year/:group', async (req, r
       students: studentsWithSummary,
       summary: {
         total_days: totalDays,
+        total_planned_days: semesterStartDate && semesterEndDate
+          ? countScheduledDays(semesterStartDate, semesterEndDate, holidayDates)
+          : totalDays,
+        days_remaining: semesterStartDate && semesterEndDate
+          ? countScheduledDays(
+              new Date(Date.parse(`${cutoffDate}T00:00:00.000Z`) + 86400000).toISOString().slice(0, 10),
+              semesterEndDate,
+              holidayDates
+            )
+          : 0,
         present: roomPresent,
-          present_latest_date: presentLatestDate,
-          latest_date: latestDate,
+        present_latest_date: presentLatestDate,
+        latest_date: latestDate,
         absent: roomAbsent,
         late_leave: roomLateLeave,
+      },
+      daily_summary: {
+        date: cutoffDate,
+        present: dailyPresent,
+        late: dailyLate,
+        absent: dailyAbsent,
+        leave: dailyLeave,
       },
       mandatory_activities: {
         total_days: activityDates.length,

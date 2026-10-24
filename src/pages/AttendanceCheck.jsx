@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { format } from 'date-fns';
-import { Save, Loader2 } from 'lucide-react';
+import { Save, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -190,6 +190,47 @@ export default function AttendanceCheck() {
     }
   };
 
+  const historicalAttendanceToCancel = existingAttendance.filter(record =>
+    filteredStudents.some(student => student.student_id === record.student_id)
+  );
+  const isHistoricalDate = selectedDate < today;
+
+  const handleCancelHistoricalAttendance = async () => {
+    if (savingRef.current || historicalAttendanceToCancel.length === 0) return;
+    const confirmed = window.confirm(
+      `ยืนยันยกเลิกการบันทึกเข้าแถววันที่ ${selectedDate} จำนวน ${historicalAttendanceToCancel.length} รายการหรือไม่?`
+    );
+    if (!confirmed) return;
+
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      for (const record of historicalAttendanceToCancel) {
+        await base44.entities.Attendance.delete(record.id);
+      }
+
+      const canceledStudentIds = new Set(historicalAttendanceToCancel.map(record => record.student_id));
+      setAttendanceData(prev => Object.fromEntries(
+        Object.entries(prev).filter(([studentId]) => !canceledStudentIds.has(studentId))
+      ));
+      queryClient.invalidateQueries({ queryKey: ['attendance-date', selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ['attendance-today'] });
+      toast({
+        title: 'ยกเลิกการบันทึกแล้ว',
+        description: `ยกเลิกข้อมูลวันที่ ${selectedDate} จำนวน ${historicalAttendanceToCancel.length} รายการ`,
+      });
+    } catch (error) {
+      toast({
+        title: 'เกิดข้อผิดพลาด',
+        description: error?.message || 'ยกเลิกการบันทึกไม่สำเร็จ',
+        variant: 'destructive',
+      });
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
   const checkedCount = filteredStudents.filter(s => attendanceData[s.student_id]?.status).length;
   const canceledCount = filteredStudents.filter(s => {
     const existing = existingAttendance.some(a => a.student_id === s.student_id);
@@ -296,6 +337,18 @@ export default function AttendanceCheck() {
           >
             ยกเลิกทั้งหมด
           </Button>
+          {isHistoricalDate && historicalAttendanceToCancel.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-red-300 text-red-700 hover:bg-red-50"
+              onClick={handleCancelHistoricalAttendance}
+              disabled={saving}
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              ยกเลิกที่บันทึกแล้ว ({historicalAttendanceToCancel.length})
+            </Button>
+          )}
           <span className="ml-auto text-sm text-muted-foreground">
             เช็คแล้ว {checkedCount}/{filteredStudents.length} คน
             {canceledCount > 0 ? ` | รอยกเลิก ${canceledCount} คน` : ''}
